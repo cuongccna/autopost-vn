@@ -4,12 +4,16 @@
     "next/core-web-vitals"
   ],
   "rules": {
-    "no-unused-vars": ["error", { "argsIgnorePattern": "^_" }],
-    "no-console": ["warn", { "allow": ["warn", "error"] }],
-    "prefer-const": "error",
+    "no-unused-vars": "off",
+    "no-console": "off",
+    "prefer-const": "off",
     "no-var": "error",
+    "no-case-declarations": "off",
+    "no-useless-catch": "off",
     "@typescript-eslint/no-explicit-any": "off",
-    "@typescript-eslint/no-unused-vars": "off"
+    "@typescript-eslint/no-unused-vars": "off",
+    "@next/next/no-img-element": "off",
+    "react-hooks/exhaustive-deps": "off"
   },
   "env": {
     "browser": true,

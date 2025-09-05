@@ -104,7 +104,7 @@ export async function logAIUsage(
     const supabase = sbServer(true); // Use service role for admin operations
     
     const { error } = await supabase
-      .from('ai_usage')
+      .from('autopostvn_ai_usage')
       .insert({
         user_id: userId,
         request_type: requestType,
@@ -130,19 +130,38 @@ export async function getAIUsageStats(userId: string): Promise<AIUsageStats | nu
   try {
     const supabase = sbServer(true); // Use service role for admin operations
     
-    // Get user role first (you might want to adjust this based on your user table structure)
-    const { data: userData, error: userError } = await supabase
-      .from('users')
-      .select('subscription_tier')
+    // Get user role first - try to find existing user
+    let { data: userData, error: userError } = await supabase
+      .from('autopostvn_users')
+      .select('user_role')
       .eq('id', userId)
       .single();
 
-    if (userError) {
+    // If user doesn't exist, create a new one with free tier
+    if (userError && userError.code === 'PGRST116') {
+      const { data: newUser, error: createError } = await supabase
+        .from('autopostvn_users')
+        .insert({
+          id: userId,
+          email: '', // Will be updated later if needed
+          user_role: 'free',
+          created_at: new Date().toISOString()
+        })
+        .select('user_role')
+        .single();
+
+      if (createError) {
+        console.error('Error creating user:', createError);
+        return null;
+      }
+      
+      userData = newUser;
+    } else if (userError) {
       console.error('Error getting user data:', userError);
       return null;
     }
 
-    const userRole = userData.subscription_tier || 'free';
+    const userRole = userData?.user_role || 'free';
     
     const result = await checkAIRateLimit(userId, userRole);
     return result.stats;

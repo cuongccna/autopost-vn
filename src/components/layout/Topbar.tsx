@@ -4,6 +4,7 @@ import MobileSidebar from './MobileSidebar';
 import AIUsageIndicator from '../shared/AIUsageIndicator';
 import RoleBadge from '../shared/RoleBadge';
 import PostUsageIndicator from '../shared/PostUsageIndicator';
+import { UserAvatarDropdown } from '../shared/UserAvatarDropdown';
 
 interface TopbarProps {
   onOpenCompose: () => void;
@@ -35,7 +36,7 @@ export default function Topbar({ onOpenCompose, currentTab, onTabChange }: Topba
           <span className="hidden sm:inline">➕ Tạo bài đăng</span>
           <span className="sm:hidden">➕</span>
         </button>
-        <div className="h-8 w-8 rounded-full bg-gray-200"></div>
+        <UserAvatarDropdown />
       </div>
     </div>
   );

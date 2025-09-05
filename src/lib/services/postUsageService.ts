@@ -102,7 +102,7 @@ export async function logPostUsage(
     const supabase = sbServer(true); // Use service role for admin operations
     
     const { error } = await supabase
-      .from('post_usage')
+      .from('autopostvn_post_usage')
       .insert({
         user_id: userId,
         post_id: postId,
@@ -141,7 +141,7 @@ export async function updatePostStatus(
     }
     
     const { error } = await supabase
-      .from('post_usage')
+      .from('autopostvn_post_usage')
       .update(updateData)
       .eq('user_id', userId)
       .eq('post_id', postId);
@@ -221,7 +221,7 @@ export async function getPostUsageBreakdown(
     startDate.setDate(startDate.getDate() - days);
     
     const { data, error } = await supabase
-      .from('post_usage')
+      .from('autopostvn_post_usage')
       .select('platform, post_type, status, created_at')
       .eq('user_id', userId)
       .gte('created_at', startDate.toISOString())

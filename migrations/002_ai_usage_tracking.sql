@@ -1,10 +1,28 @@
 -- AI Usage Tracking Migration
 -- Created: 2025-09-05
 
+-- Enable necessary extensions if not already enabled
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+-- Users table - Bảng người dùng chính (tham chiếu từ Supabase auth.users)
+CREATE TABLE IF NOT EXISTS public.autopostvn_users (
+  id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  email TEXT UNIQUE NOT NULL,
+  full_name TEXT,
+  avatar_url TEXT,
+  user_role VARCHAR(20) NOT NULL DEFAULT 'free' CHECK (user_role IN ('free', 'professional', 'enterprise')),
+  is_active BOOLEAN DEFAULT TRUE,
+  subscription_expires_at TIMESTAMP WITH TIME ZONE,
+  metadata JSONB DEFAULT '{}'::jsonb,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Table để track AI usage của users
-CREATE TABLE ai_usage (
+CREATE TABLE IF NOT EXISTS public.autopostvn_ai_usage (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES public.autopostvn_users(id) ON DELETE CASCADE,
   request_type VARCHAR(50) NOT NULL, -- 'caption', 'hashtags', 'script', 'optimal_times'
   request_date DATE NOT NULL DEFAULT CURRENT_DATE,
   request_timestamp TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
@@ -16,12 +34,14 @@ CREATE TABLE ai_usage (
 );
 
 -- Indexes để tối ưu query
-CREATE INDEX idx_ai_usage_user_date ON ai_usage(user_id, request_date);
-CREATE INDEX idx_ai_usage_user_month ON ai_usage(user_id, DATE_TRUNC('month', request_date));
-CREATE INDEX idx_ai_usage_type ON ai_usage(request_type);
+CREATE INDEX IF NOT EXISTS idx_autopostvn_ai_usage_user_date ON public.autopostvn_ai_usage(user_id, request_date);
+CREATE INDEX IF NOT EXISTS idx_autopostvn_ai_usage_user_month ON public.autopostvn_ai_usage(user_id, DATE_TRUNC('month', request_date));
+CREATE INDEX IF NOT EXISTS idx_autopostvn_ai_usage_type ON public.autopostvn_ai_usage(request_type);
+CREATE INDEX IF NOT EXISTS idx_autopostvn_users_role ON public.autopostvn_users(user_role);
+CREATE INDEX IF NOT EXISTS idx_autopostvn_users_active ON public.autopostvn_users(is_active);
 
 -- Table để lưu rate limits theo role
-CREATE TABLE ai_rate_limits (
+CREATE TABLE IF NOT EXISTS public.autopostvn_ai_rate_limits (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_role VARCHAR(20) NOT NULL UNIQUE, -- 'free', 'professional', 'enterprise'
   daily_limit INTEGER NOT NULL,
@@ -31,10 +51,11 @@ CREATE TABLE ai_rate_limits (
 );
 
 -- Insert default rate limits
-INSERT INTO ai_rate_limits (user_role, daily_limit, monthly_limit) VALUES
+INSERT INTO public.autopostvn_ai_rate_limits (user_role, daily_limit, monthly_limit) VALUES
 ('free', 2, 60),
 ('professional', 20, 600),
-('enterprise', -1, -1); -- -1 means unlimited
+('enterprise', -1, -1) -- -1 means unlimited
+ON CONFLICT (user_role) DO NOTHING;
 
 -- Function để kiểm tra và update trigger
 CREATE OR REPLACE FUNCTION update_updated_at_column()
@@ -46,10 +67,19 @@ END;
 $$ language 'plpgsql';
 
 -- Triggers cho updated_at
-CREATE TRIGGER update_ai_usage_updated_at BEFORE UPDATE ON ai_usage 
+DROP TRIGGER IF EXISTS update_autopostvn_users_updated_at ON public.autopostvn_users;
+CREATE TRIGGER update_autopostvn_users_updated_at 
+    BEFORE UPDATE ON public.autopostvn_users 
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
-CREATE TRIGGER update_ai_rate_limits_updated_at BEFORE UPDATE ON ai_rate_limits 
+DROP TRIGGER IF EXISTS update_autopostvn_ai_usage_updated_at ON public.autopostvn_ai_usage;
+CREATE TRIGGER update_autopostvn_ai_usage_updated_at 
+    BEFORE UPDATE ON public.autopostvn_ai_usage 
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+DROP TRIGGER IF EXISTS update_autopostvn_ai_rate_limits_updated_at ON public.autopostvn_ai_rate_limits;
+CREATE TRIGGER update_autopostvn_ai_rate_limits_updated_at 
+    BEFORE UPDATE ON public.autopostvn_ai_rate_limits 
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- Function để lấy usage count
@@ -63,13 +93,13 @@ DECLARE
 BEGIN
     IF p_period = 'daily' THEN
         SELECT COUNT(*) INTO usage_count
-        FROM ai_usage
+        FROM public.autopostvn_ai_usage
         WHERE user_id = p_user_id 
         AND request_date = CURRENT_DATE
         AND success = TRUE;
     ELSIF p_period = 'monthly' THEN
         SELECT COUNT(*) INTO usage_count
-        FROM ai_usage
+        FROM public.autopostvn_ai_usage
         WHERE user_id = p_user_id 
         AND DATE_TRUNC('month', request_date) = DATE_TRUNC('month', CURRENT_DATE)
         AND success = TRUE;
@@ -97,14 +127,14 @@ BEGIN
     -- Get rate limits for user role
     SELECT rl.daily_limit, rl.monthly_limit 
     INTO daily_limit, monthly_limit
-    FROM ai_rate_limits rl
+    FROM public.autopostvn_ai_rate_limits rl
     WHERE rl.user_role = p_user_role;
     
     -- If no limits found, default to free tier
     IF daily_limit IS NULL THEN
         SELECT rl.daily_limit, rl.monthly_limit 
         INTO daily_limit, monthly_limit
-        FROM ai_rate_limits rl
+        FROM public.autopostvn_ai_rate_limits rl
         WHERE rl.user_role = 'free';
     END IF;
     
@@ -130,3 +160,26 @@ BEGIN
     RETURN result;
 END;
 $$ LANGUAGE plpgsql;
+
+-- Row Level Security (RLS) Policies
+ALTER TABLE public.autopostvn_users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.autopostvn_ai_usage ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.autopostvn_ai_rate_limits ENABLE ROW LEVEL SECURITY;
+
+-- Users can only see their own data
+CREATE POLICY "Users can view own profile" ON public.autopostvn_users
+    FOR SELECT USING (auth.uid() = id);
+
+CREATE POLICY "Users can update own profile" ON public.autopostvn_users
+    FOR UPDATE USING (auth.uid() = id);
+
+-- AI usage policies
+CREATE POLICY "Users can view own AI usage" ON public.autopostvn_ai_usage
+    FOR SELECT USING (auth.uid() = user_id);
+
+CREATE POLICY "Service can insert AI usage" ON public.autopostvn_ai_usage
+    FOR INSERT WITH CHECK (true);
+
+-- Rate limits are readable by all authenticated users
+CREATE POLICY "Authenticated users can view rate limits" ON public.autopostvn_ai_rate_limits
+    FOR SELECT TO authenticated USING (true);
