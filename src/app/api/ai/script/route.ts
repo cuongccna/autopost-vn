@@ -2,12 +2,32 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { generateVideoScript } from '@/lib/services/gemini';
+import { checkAIRateLimit, logAIUsage } from '@/lib/services/aiUsageService';
 
 export async function POST(request: NextRequest) {
+  let userId: string | null = null;
+  
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    userId = (session.user as any).id;
+    if (!userId) {
+      return NextResponse.json({ error: 'User ID not found' }, { status: 401 });
+    }
+
+    // Check AI rate limit before processing
+    const rateLimitCheck = await checkAIRateLimit(userId, 'script');
+    if (!rateLimitCheck.allowed) {
+      return NextResponse.json(
+        { 
+          error: 'Rate limit exceeded',
+          message: rateLimitCheck.message
+        },
+        { status: 429 }
+      );
     }
 
     const body = await request.json();
@@ -67,6 +87,9 @@ export async function POST(request: NextRequest) {
       style: style as 'educational' | 'entertainment' | 'promotional' | 'storytelling',
     });
 
+    // Log successful AI usage
+    await logAIUsage(userId, 'script', true, 0);
+
     return NextResponse.json({ 
       script,
       metadata: {
@@ -80,6 +103,11 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     console.error('Video script generation error:', error);
+    
+    // Log failed AI usage
+    if (userId) {
+      await logAIUsage(userId, 'script', false, 0, error instanceof Error ? error.message : 'Unknown error');
+    }
     
     if (error instanceof Error) {
       return NextResponse.json(

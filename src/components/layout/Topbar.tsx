@@ -1,6 +1,9 @@
 'use client';
 
 import MobileSidebar from './MobileSidebar';
+import AIUsageIndicator from '../shared/AIUsageIndicator';
+import RoleBadge from '../shared/RoleBadge';
+import PostUsageIndicator from '../shared/PostUsageIndicator';
 
 interface TopbarProps {
   onOpenCompose: () => void;
@@ -21,7 +24,10 @@ export default function Topbar({ onOpenCompose, currentTab, onTabChange }: Topba
           <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">🔎</span>
         </div>
       </div>
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-3">
+        <PostUsageIndicator className="hidden sm:flex" />
+        <AIUsageIndicator className="hidden sm:flex" />
+        <RoleBadge size="sm" className="hidden md:flex" />
         <button 
           onClick={onOpenCompose}
           className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700"

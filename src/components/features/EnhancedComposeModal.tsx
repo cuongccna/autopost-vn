@@ -3,6 +3,8 @@
 import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { useSession } from 'next-auth/react';
+import { usePermissions } from '@/hooks/usePermissions';
+import PermissionGate from '@/components/shared/PermissionGate';
 import { PROVIDERS } from '@/lib/constants';
 import ImageUpload from '@/components/ui/ImageUpload';
 import {
@@ -295,6 +297,20 @@ export default function EnhancedComposeModal({
 
       if (!response.ok) {
         const errorData = await response.json();
+        
+        // Handle rate limit specifically
+        if (response.status === 429) {
+          const rateLimitMessage = errorData.upgrade_info || errorData.message || 'Đã hết lượt sử dụng AI';
+          setValidationErrors([rateLimitMessage]);
+          
+          // Show upgrade modal or notification
+          if (errorData.stats) {
+            console.log('Rate limit stats:', errorData.stats);
+          }
+          
+          return;
+        }
+        
         throw new Error(errorData.error || 'Không thể gợi ý thời gian');
       }
 
@@ -742,7 +758,16 @@ export default function EnhancedComposeModal({
       
     } catch (error) {
       console.error('Error submitting post:', error);
-      setValidationErrors(['Có lỗi xảy ra khi tạo bài đăng. Vui lòng thử lại.']);
+      
+      // Handle post limit exceeded error
+      if (error instanceof Error && error.message.includes('Post limit exceeded')) {
+        setValidationErrors(['Bạn đã hết giới hạn số bài đăng trong tháng. Nâng cấp để đăng không giới hạn!']);
+      } else if ((error as any)?.status === 429) {
+        const errorData = (error as any)?.data;
+        setValidationErrors([errorData?.message || 'Bạn đã vượt quá giới hạn số bài đăng trong tháng.']);
+      } else {
+        setValidationErrors(['Có lỗi xảy ra khi tạo bài đăng. Vui lòng thử lại.']);
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -1029,12 +1054,25 @@ export default function EnhancedComposeModal({
                   onChange={(e) => setPrimaryText(e.target.value)} 
                 />
                 <div className="flex gap-2 mt-2">
-                  <Button variant="outline" onClick={autoCaption}>
-                    <Sparkles className="w-4 h-4 mr-1" /> Gợi ý caption (AI)
-                  </Button>
-                  <Button variant="outline" onClick={autoHashtags}>
-                    <Hash className="w-4 h-4 mr-1" /> Sinh hashtag
-                  </Button>
+                  <PermissionGate feature="ai" fallback={
+                    <Button variant="outline" onClick={() => {}} disabled>
+                      <Sparkles className="w-4 h-4 mr-1" /> Gợi ý caption (Premium)
+                    </Button>
+                  }>
+                    <Button variant="outline" onClick={autoCaption}>
+                      <Sparkles className="w-4 h-4 mr-1" /> Gợi ý caption (AI)
+                    </Button>
+                  </PermissionGate>
+                  
+                  <PermissionGate feature="ai" fallback={
+                    <Button variant="outline" onClick={() => {}} disabled>
+                      <Hash className="w-4 h-4 mr-1" /> Sinh hashtag (Premium)
+                    </Button>
+                  }>
+                    <Button variant="outline" onClick={autoHashtags}>
+                      <Hash className="w-4 h-4 mr-1" /> Sinh hashtag
+                    </Button>
+                  </PermissionGate>
                 </div>
               </Field>
 
@@ -1113,14 +1151,30 @@ export default function EnhancedComposeModal({
               <div>
                 <div className="mb-2 flex items-center justify-between">
                   <span className="text-sm font-medium">Thời gian đăng</span>
-                  <Button 
-                    variant="outline" 
-                    onClick={suggestOptimalTime}
-                    className="text-xs px-2 py-1"
+                  <PermissionGate 
+                    feature="scheduling" 
+                    subFeature="aiOptimized"
+                    fallback={
+                      <Button 
+                        variant="outline" 
+                        onClick={() => {}}
+                        className="text-xs px-2 py-1"
+                        disabled
+                      >
+                        <Clock className="w-3 h-3 mr-1" />
+                        Gợi ý AI (Premium)
+                      </Button>
+                    }
                   >
-                    <Clock className="w-3 h-3 mr-1" />
-                    Gợi ý thời gian
-                  </Button>
+                    <Button 
+                      variant="outline" 
+                      onClick={suggestOptimalTime}
+                      className="text-xs px-2 py-1"
+                    >
+                      <Clock className="w-3 h-3 mr-1" />
+                      Gợi ý thời gian (AI)
+                    </Button>
+                  </PermissionGate>
                 </div>
                 <input 
                   type="datetime-local"

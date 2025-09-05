@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { suggestOptimalTimes } from '@/lib/services/gemini';
+import { checkAIRateLimit, logAIUsage } from '@/lib/services/aiUsageService';
 
 export async function POST(request: NextRequest) {
   try {
@@ -11,6 +12,25 @@ export async function POST(request: NextRequest) {
     if (!session?.user) {
       console.log('❌ Unauthorized request');
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const userId = (session.user as any).id || session.user.email;
+    const userRole = (session.user as any).subscription_tier || 'free';
+    
+    // Check AI rate limit before processing
+    console.log('🔍 Checking AI rate limit for user:', userId, 'role:', userRole);
+    const rateLimitResult = await checkAIRateLimit(userId, userRole);
+    
+    if (!rateLimitResult.allowed) {
+      console.log('❌ Rate limit exceeded:', rateLimitResult.stats);
+      await logAIUsage(userId, 'optimal_times', false, 0, 'Rate limit exceeded');
+      
+      return NextResponse.json({
+        error: 'Rate limit exceeded',
+        message: rateLimitResult.message,
+        stats: rateLimitResult.stats,
+        upgrade_info: rateLimitResult.message
+      }, { status: 429 });
     }
 
     const body = await request.json();
@@ -82,6 +102,9 @@ export async function POST(request: NextRequest) {
 
     console.log('✅ Gemini response received:', suggestions);
 
+    // Log successful AI usage
+    await logAIUsage(userId, 'optimal_times', true, 0);
+
     return NextResponse.json({ 
       suggestions: suggestions.suggestions,
       metadata: {
@@ -101,6 +124,17 @@ export async function POST(request: NextRequest) {
       type: typeof error,
       error
     });
+    
+    // Get userId for logging even if there's an error
+    try {
+      const session = await getServerSession(authOptions);
+      const userId = (session?.user as any)?.id || session?.user?.email;
+      if (userId) {
+        await logAIUsage(userId, 'optimal_times', false, 0, error instanceof Error ? error.message : 'Unknown error');
+      }
+    } catch (logError) {
+      console.error('Failed to log error usage:', logError);
+    }
     
     if (error instanceof Error) {
       return NextResponse.json(

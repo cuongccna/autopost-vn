@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { sbServer } from '@/lib/supabase/server'
+import { checkPostRateLimit, logPostUsage } from '@/lib/services/postUsageService'
 
 // GET /api/posts - Fetch user's posts
 export async function GET(_request: NextRequest) {
@@ -39,10 +40,31 @@ export async function GET(_request: NextRequest) {
 
 // POST /api/posts - Create new post
 export async function POST(request: NextRequest) {
+  let userId: string | null = null;
+  
   try {
     const session = await getServerSession(authOptions)
     if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    userId = (session.user as any).id;
+    if (!userId) {
+      return NextResponse.json({ error: 'User ID not found' }, { status: 401 });
+    }
+
+    // Check post rate limit before processing
+    const userRole = 'free'; // TODO: Get actual user role from database/session
+    const rateLimitCheck = await checkPostRateLimit(userId, userRole);
+    if (!rateLimitCheck.allowed) {
+      return NextResponse.json(
+        { 
+          error: 'Post limit exceeded',
+          message: rateLimitCheck.message,
+          stats: rateLimitCheck.stats
+        },
+        { status: 429 }
+      );
     }
 
     const body = await request.json()
@@ -156,8 +178,31 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Log post usage after successful creation
+    try {
+      const platform = providers?.[0] || 'facebook'; // Use first provider or default
+      const postType = scheduled_at ? 'scheduled' : 'draft';
+      const scheduledDate = scheduled_at ? new Date(scheduled_at) : undefined;
+      
+      await logPostUsage(
+        userId,
+        postType as any,
+        platform as any,
+        post.id,
+        scheduledDate,
+        post.status as any
+      );
+    } catch (logError) {
+      console.warn('Failed to log post usage:', logError);
+      // Don't fail the request for logging errors
+    }
+
     return NextResponse.json(
-      { post, message: 'Post created successfully' },
+      { 
+        post, 
+        message: 'Post created successfully',
+        usage: rateLimitCheck.stats
+      },
       { status: 201 }
     )
   } catch (error) {
