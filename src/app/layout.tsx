@@ -2,6 +2,7 @@ import React from 'react'
 import './globals.css'
 import type { Metadata } from 'next'
 import { SessionProvider } from '@/components/providers/SessionProvider'
+import { ToastProvider } from '@/components/ui/Toast'
 
 export const metadata: Metadata = {
   title: 'AutoPost VN - Tự động hóa đăng bài mạng xã hội',
@@ -34,7 +35,9 @@ export default function RootLayout({
       </head>
       <body>
         <SessionProvider>
-          {children}
+          <ToastProvider>
+            {children}
+          </ToastProvider>
         </SessionProvider>
       </body>
     </html>

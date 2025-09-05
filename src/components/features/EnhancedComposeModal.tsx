@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 import { useSession } from 'next-auth/react';
 import { usePermissions } from '@/hooks/usePermissions';
 import PermissionGate from '@/components/shared/PermissionGate';
+import { useToast } from '@/components/ui/Toast';
 import { PROVIDERS } from '@/lib/constants';
 import ImageUpload from '@/components/ui/ImageUpload';
 import {
@@ -125,6 +126,42 @@ const aspectDims = (ratio: string) => {
   }
 };
 
+// Get responsive preview dimensions based on device
+const getResponsiveDims = (ratio: string, device: 'mobile' | 'tablet' | 'desktop') => {
+  const baseDims = aspectDims(ratio);
+  
+  // Maximum container constraints
+  const maxWidth = device === 'desktop' ? 500 : device === 'tablet' ? 400 : 320;
+  const maxHeight = 600; // Maximum height for any device
+  
+  let scaledDims;
+  switch (device) {
+    case 'mobile':
+      scaledDims = { w: baseDims.w * 0.8, h: baseDims.h * 0.8 };
+      break;
+    case 'tablet':
+      scaledDims = { w: baseDims.w * 1.0, h: baseDims.h * 1.0 };
+      break;
+    case 'desktop':
+      scaledDims = { w: baseDims.w * 1.2, h: baseDims.h * 1.2 };
+      break;
+    default:
+      scaledDims = baseDims;
+  }
+  
+  // Apply constraints - scale down if exceeds limits
+  if (scaledDims.w > maxWidth || scaledDims.h > maxHeight) {
+    const scaleW = maxWidth / scaledDims.w;
+    const scaleH = maxHeight / scaledDims.h;
+    const finalScale = Math.min(scaleW, scaleH);
+    
+    scaledDims.w = scaledDims.w * finalScale;
+    scaledDims.h = scaledDims.h * finalScale;
+  }
+  
+  return scaledDims;
+};
+
 const TemplateCard = ({ tpl, selected, onSelect }: {
   tpl: any;
   selected: boolean;
@@ -198,6 +235,7 @@ interface EnhancedComposeModalProps {
   goldenHours?: string[];
   defaultDateTime?: Date | null;
   editingPost?: Post | null;
+  onAIUsageUpdate?: () => void; // New callback to refresh AI stats
 }
 
 export default function EnhancedComposeModal({ 
@@ -206,15 +244,26 @@ export default function EnhancedComposeModal({
   onSubmit, 
   goldenHours: customGoldenHours, 
   defaultDateTime, 
-  editingPost 
+  editingPost,
+  onAIUsageUpdate
 }: EnhancedComposeModalProps) {
   const { data: session } = useSession();
   
   // Tab state
   const [activeTab, setActiveTab] = useState("social");
   
+  // AI Usage state
+  const [aiUsageStats, setAiUsageStats] = useState<{
+    dailyUsage: number;
+    dailyLimit: number;
+    monthlyUsage: number;
+    monthlyLimit: number;
+    userRole: string;
+    allowed: boolean;
+  } | null>(null);
+  
   // Social Post Form states
-  const [platform, setPlatform] = useState("Instagram");
+  const [platform, setPlatform] = useState("Facebook Page");
   const [ratio, setRatio] = useState("1:1");
   const [title, setTitle] = useState("");
   const [primaryText, setPrimaryText] = useState("");
@@ -226,7 +275,7 @@ export default function EnhancedComposeModal({
   const [template, setTemplate] = useState<{id: string; name: string; description?: string; ratio?: string} | null>(null);
   
   // Video Form states
-  const [videoPlatform, setVideoPlatform] = useState("TikTok");
+  const [videoPlatform, setVideoPlatform] = useState("Instagram Reels");
   const [videoRatio, setVideoRatio] = useState("9:16");
   const [duration, setDuration] = useState(15);
   const [hook, setHook] = useState("");
@@ -243,7 +292,77 @@ export default function EnhancedComposeModal({
   const [selectedChannels, setSelectedChannels] = useState<Set<string>>(new Set(['fb', 'ig']));
   const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [validationErrors, setValidationErrors] = useState<string[]>([]);
+  
+  // Toast for notifications
+  const { showToast } = useToast();
+
+  // Fetch AI usage stats on modal open
+  const fetchAIUsageStats = async () => {
+    try {
+      const response = await fetch('/api/ai/usage-stats');
+      if (response.ok) {
+        const data = await response.json();
+        setAiUsageStats(data.stats);
+      }
+    } catch (error) {
+      console.error('Error fetching AI usage stats:', error);
+    }
+  };
+
+  useEffect(() => {
+    if (isOpen) {
+      fetchAIUsageStats();
+    }
+  }, [isOpen]);
+
+  // AI Limit Warning Component
+  const AILimitWarning = () => {
+    if (!aiUsageStats) return null;
+    
+    const isAtLimit = aiUsageStats.dailyUsage >= aiUsageStats.dailyLimit && aiUsageStats.dailyLimit !== -1;
+    const isNearLimit = aiUsageStats.dailyUsage / aiUsageStats.dailyLimit >= 0.8 && aiUsageStats.dailyLimit !== -1;
+    
+    if (!isAtLimit && !isNearLimit) return null;
+    
+    return (
+      <div className={`mb-4 p-4 rounded-xl border-l-4 ${
+        isAtLimit 
+          ? 'bg-red-50 border-red-400 text-red-800' 
+          : 'bg-orange-50 border-orange-400 text-orange-800'
+      }`}>
+        <div className="flex items-start gap-3">
+          <div className="flex-shrink-0">
+            {isAtLimit ? '🚫' : '⚠️'}
+          </div>
+          <div className="flex-1">
+            <h4 className="font-medium mb-1">
+              {isAtLimit ? 'Đã hết lượt AI hôm nay' : 'Sắp hết lượt AI'}
+            </h4>
+            <p className="text-sm">
+              {isAtLimit 
+                ? `Bạn đã sử dụng ${aiUsageStats.dailyUsage}/${aiUsageStats.dailyLimit} lượt AI hôm nay.` 
+                : `Bạn đã sử dụng ${aiUsageStats.dailyUsage}/${aiUsageStats.dailyLimit} lượt AI hôm nay.`
+              }
+            </p>
+            {isAtLimit && (
+              <div className="mt-2">
+                <button 
+                  className="text-sm bg-blue-600 text-white px-3 py-1 rounded-lg hover:bg-blue-700 transition-colors"
+                  onClick={() => {
+                    // Handle upgrade - could open upgrade modal or redirect
+                    console.log('Upgrade to Professional');
+                  }}
+                >
+                  Nâng cấp lên Professional - 50 lượt/ngày
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+  const [previewDevice, setPreviewDevice] = useState<'mobile' | 'tablet' | 'desktop'>('mobile');
   
   // Toolbar states
   const [activeTools, setActiveTools] = useState<Set<string>>(new Set());
@@ -259,18 +378,62 @@ export default function EnhancedComposeModal({
   ];
 
   const hours = customGoldenHours || ['09:00', '12:30', '20:00'];
-  const dims = aspectDims(activeTab === "social" ? ratio : videoRatio);
+  const dims = getResponsiveDims(activeTab === "social" ? ratio : videoRatio, previewDevice);
 
   // Smart scheduling function with Gemini AI
   const suggestOptimalTime = async () => {
     try {
       setIsSubmitting(true);
+      
+      // Validate required inputs in order
+      if (!title.trim()) {
+        showToast({
+          type: 'warning',
+          title: 'Thiếu thông tin',
+          message: 'Vui lòng nhập Tiêu đề/Hook trước khi sử dụng AI gợi ý thời gian'
+        });
+        setIsSubmitting(false);
+        return;
+      }
+      
+      if (!primaryText.trim()) {
+        showToast({
+          type: 'warning',
+          title: 'Thiếu nội dung',
+          message: 'Vui lòng tạo caption trước khi sử dụng AI gợi ý thời gian'
+        });
+        setIsSubmitting(false);
+        return;
+      }
+      
+      if (!hashtags.trim()) {
+        showToast({
+          type: 'warning',
+          title: 'Thiếu hashtag',
+          message: 'Vui lòng tạo hashtag trước khi sử dụng AI gợi ý thời gian'
+        });
+        setIsSubmitting(false);
+        return;
+      }
+      
       const selectedPlatforms = Array.from(selectedChannels);
       
       if (selectedPlatforms.length === 0) {
-        setValidationErrors(['Vui lòng chọn ít nhất một kênh trước khi gợi ý thời gian']);
+        showToast({
+          type: 'warning',
+          title: 'Chưa chọn kênh',
+          message: 'Vui lòng chọn ít nhất một kênh trước khi gợi ý thời gian'
+        });
         return;
       }
+      
+      // Show loading toast
+      showToast({
+        type: 'info',
+        title: 'AI đang phân tích...',
+        message: 'Đang tìm thời gian tối ưu để đăng bài',
+        duration: 3000
+      });
       
       // Map UI channels to API platforms
       const platformMapping: { [key: string]: string } = {
@@ -301,7 +464,17 @@ export default function EnhancedComposeModal({
         // Handle rate limit specifically
         if (response.status === 429) {
           const rateLimitMessage = errorData.upgrade_info || errorData.message || 'Đã hết lượt sử dụng AI';
-          setValidationErrors([rateLimitMessage]);
+          showToast({
+            type: 'error',
+            title: 'Hết lượt AI',
+            message: rateLimitMessage,
+            action: {
+              label: 'Nâng cấp tài khoản',
+              onClick: () => {
+                console.log('Upgrade account');
+              }
+            }
+          });
           
           // Show upgrade modal or notification
           if (errorData.stats) {
@@ -336,15 +509,21 @@ export default function EnhancedComposeModal({
         const formatted = `${suggestedDate.getFullYear()}-${pad(suggestedDate.getMonth() + 1)}-${pad(suggestedDate.getDate())}T${pad(suggestedDate.getHours())}:${pad(suggestedDate.getMinutes())}`;
         setScheduleAt(formatted);
         
-        // Show reasoning to user
-        setValidationErrors([]);
+        // Show success message
+        showToast({
+          type: 'success',
+          title: 'Tìm thấy thời gian tối ưu!',
+          message: `AI đề xuất đăng lúc ${suggestedTime} để đạt hiệu quả tốt nhất`
+        });
       }
       
     } catch (error) {
       console.error('Optimal time suggestion error:', error);
-      setValidationErrors([
-        error instanceof Error ? error.message : 'Lỗi khi gợi ý thời gian tối ưu'
-      ]);
+      showToast({
+        type: 'error',
+        title: 'Lỗi gợi ý thời gian',
+        message: error instanceof Error ? error.message : 'Lỗi khi gợi ý thời gian tối ưu'
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -355,7 +534,22 @@ export default function EnhancedComposeModal({
   const autoScript = async () => {
     try {
       setIsSubmitting(true);
-      const currentPlatform = videoPlatform || "tiktok";
+      
+      // Show loading toast
+      showToast({
+        type: 'info',
+        title: 'AI đang tạo script...',
+        message: 'Vui lòng đợi trong giây lát',
+        duration: 3000
+      });
+      
+      // Map video platforms to API platforms
+      const platformMapping: { [key: string]: string } = {
+        "Facebook Page Video": "facebook",
+        "Instagram Reels": "instagram", 
+        "Zalo OA Video": "zalo"
+      };
+      const currentPlatform = platformMapping[videoPlatform] || "instagram";
       
       const response = await fetch('/api/ai/script', {
         method: 'POST',
@@ -363,7 +557,7 @@ export default function EnhancedComposeModal({
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          platform: currentPlatform.toLowerCase(),
+          platform: currentPlatform,
           duration: duration,
           title: hook || title || 'Video viral',
           content: sub || primaryText,
@@ -385,12 +579,18 @@ export default function EnhancedComposeModal({
       setBeats(script.beats || []);
       
       // Show success message
-      setValidationErrors([]);
+      showToast({
+        type: 'success',
+        title: 'Tạo script thành công!',
+        message: 'AI đã tạo script video phù hợp với yêu cầu của bạn'
+      });
     } catch (error) {
       console.error('Auto script error:', error);
-      setValidationErrors([
-        error instanceof Error ? error.message : 'Lỗi khi tạo script tự động'
-      ]);
+      showToast({
+        type: 'error',
+        title: 'Lỗi tạo script',
+        message: error instanceof Error ? error.message : 'Lỗi khi tạo script tự động'
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -446,16 +646,6 @@ export default function EnhancedComposeModal({
       }
     }
   }, [editingPost]);
-
-  // Clear validation errors when user starts typing
-  useEffect(() => {
-    if (validationErrors.length > 0) {
-      const timer = setTimeout(() => {
-        setValidationErrors([]);
-      }, 3000);
-      return () => clearTimeout(timer);
-    }
-  }, [validationErrors]);
   
   // Auto-save draft
   useEffect(() => {
@@ -495,7 +685,7 @@ export default function EnhancedComposeModal({
             setSub(draft.sub || '');
             setHashtags(draft.hashtags || '');
             setPlatform(draft.platform || 'instagram');
-            setVideoPlatform(draft.videoPlatform || 'tiktok');
+            setVideoPlatform(draft.videoPlatform || 'Instagram Reels');
             if (draft.scheduleAt) setScheduleAt(draft.scheduleAt);
             setSelectedChannels(new Set(draft.selectedChannels || []));
           }
@@ -530,19 +720,78 @@ export default function EnhancedComposeModal({
 
   const autoCaption = async () => {
     try {
-      setIsSubmitting(true);
-      const currentPlatform = platform || "instagram";
-      const productName = title || "sản phẩm";
+      // Validate required input
+      if (!title.trim()) {
+        showToast({
+          type: 'warning',
+          title: 'Thiếu thông tin',
+          message: 'Vui lòng nhập Tiêu đề/Hook trước khi sử dụng AI tạo caption'
+        });
+        return;
+      }
       
-      const response = await fetch('/api/ai/caption', {
+      // Check AI limit
+      if (aiUsageStats && !aiUsageStats.allowed) {
+        showToast({
+          type: 'error',
+          title: 'Đã hết lượt AI',
+          message: 'Đã hết lượt sử dụng AI hôm nay.',
+          action: {
+            label: 'Nâng cấp Professional',
+            onClick: () => {
+              console.log('Upgrade to Professional');
+              // Handle upgrade logic here
+            }
+          }
+        });
+        return;
+      }
+      
+      setIsSubmitting(true);
+      
+      // Show loading toast
+      showToast({
+        type: 'info',
+        title: 'AI đang tạo caption...',
+        message: 'Vui lòng đợi trong giây lát',
+        duration: 2000
+      });
+      
+      // Map UI platform to API platform
+      const platformMapping: { [key: string]: string } = {
+        'Facebook Page': 'facebook',
+        'Instagram Biz': 'instagram', 
+        'Zalo OA': 'zalo',
+        'TikTok': 'tiktok'
+      };
+      
+      const currentPlatform = platformMapping[platform] || platform?.toLowerCase() || "instagram";
+      
+      // Debug log to track what we're sending
+      console.log('🔧 DEBUG - AutoCaption Request:', {
+        platform: currentPlatform,
+        title: title.trim(),
+        content: '', // Don't send existing content to avoid bias
+        tone: 'exciting',
+        targetAudience: 'general',
+        productType: 'general'
+      });
+      
+      // For debugging UI issues, use debug endpoint first
+      const isDevelopment = process.env.NODE_ENV === 'development';
+      const endpoint = isDevelopment ? '/api/debug/ui-caption-test' : '/api/ai/caption';
+      
+      console.log(`🌐 Using endpoint: ${endpoint}`);
+      
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          platform: currentPlatform.toLowerCase(),
-          title: productName,
-          content: primaryText,
+          platform: currentPlatform,
+          title: title.trim(), // Use title directly instead of productName
+          content: '', // Don't send existing content to avoid bias
           tone: 'exciting',
           targetAudience: 'general',
           productType: 'general'
@@ -551,19 +800,42 @@ export default function EnhancedComposeModal({
 
       if (!response.ok) {
         const errorData = await response.json();
+        console.error('❌ API Error Response:', errorData);
         throw new Error(errorData.error || 'Không thể tạo caption');
       }
 
       const data = await response.json();
+      console.log('✅ API Success Response:', data);
+      
+      // Check if we have caption in response
+      if (!data.caption) {
+        console.error('❌ No caption in response:', data);
+        throw new Error('Response không chứa caption');
+      }
+      
+      console.log('📝 Setting caption to UI:', data.caption.substring(0, 100) + '...');
       setPrimaryText(data.caption);
       
       // Show success message
-      setValidationErrors([]);
+      showToast({
+        type: 'success',
+        title: 'Tạo caption thành công!',
+        message: 'AI đã tạo caption phù hợp với sản phẩm của bạn'
+      });
+      
+      // Refresh AI usage stats after successful AI call
+      if (onAIUsageUpdate) {
+        onAIUsageUpdate();
+      }
+      // Also refresh local stats
+      await fetchAIUsageStats();
     } catch (error) {
       console.error('Auto caption error:', error);
-      setValidationErrors([
-        error instanceof Error ? error.message : 'Lỗi khi tạo caption tự động'
-      ]);
+      showToast({
+        type: 'error',
+        title: 'Lỗi tạo caption',
+        message: error instanceof Error ? error.message : 'Lỗi khi tạo caption tự động'
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -571,8 +843,71 @@ export default function EnhancedComposeModal({
 
   const autoHashtags = async () => {
     try {
+      // Validate required inputs
+      if (!title.trim()) {
+        showToast({
+          type: 'warning',
+          title: 'Thiếu thông tin',
+          message: 'Vui lòng nhập Tiêu đề/Hook trước khi sử dụng AI tạo hashtag'
+        });
+        return;
+      }
+      
+      if (!primaryText.trim()) {
+        showToast({
+          type: 'warning',
+          title: 'Thiếu nội dung',
+          message: 'Vui lòng tạo caption trước khi sử dụng AI tạo hashtag'
+        });
+        return;
+      }
+      
+      // Check AI limit
+      if (aiUsageStats && !aiUsageStats.allowed) {
+        showToast({
+          type: 'error',
+          title: 'Đã hết lượt AI',
+          message: 'Đã hết lượt sử dụng AI hôm nay.',
+          action: {
+            label: 'Nâng cấp Professional',
+            onClick: () => {
+              console.log('Upgrade to Professional');
+              // Handle upgrade logic here
+            }
+          }
+        });
+        return;
+      }
+      
       setIsSubmitting(true);
-      const currentPlatform = platform || "instagram";
+      
+      // Show loading toast
+      showToast({
+        type: 'info',
+        title: 'AI đang tạo hashtags...',
+        message: 'Vui lòng đợi trong giây lát',
+        duration: 2000
+      });
+      
+      // Map UI platform to API platform
+      const platformMapping: { [key: string]: string } = {
+        'Facebook Page': 'facebook',
+        'Instagram Biz': 'instagram', 
+        'Zalo OA': 'zalo',
+        'TikTok': 'tiktok'
+      };
+      
+      const currentPlatform = platformMapping[platform] || platform?.toLowerCase() || "instagram";
+      
+      // Debug log to track what we're sending
+      console.log('🔧 DEBUG - AutoHashtags Request:', {
+        platform: currentPlatform,
+        title: title.trim(),
+        content: primaryText,
+        productType: 'general',
+        targetAudience: 'general',
+        count: 8
+      });
       
       const response = await fetch('/api/ai/hashtags', {
         method: 'POST',
@@ -580,8 +915,8 @@ export default function EnhancedComposeModal({
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          platform: currentPlatform.toLowerCase(),
-          title: title || 'sản phẩm',
+          platform: currentPlatform,
+          title: title.trim(), // Use title directly
           content: primaryText,
           productType: 'general',
           targetAudience: 'general',
@@ -591,19 +926,43 @@ export default function EnhancedComposeModal({
 
       if (!response.ok) {
         const errorData = await response.json();
+        console.error('❌ API Error Response:', errorData);
         throw new Error(errorData.error || 'Không thể tạo hashtags');
       }
 
       const data = await response.json();
-      setHashtags(data.hashtags.join(' '));
+      console.log('✅ API Success Response:', data);
+      
+      // Check if we have hashtags in response
+      if (!data.hashtags || !Array.isArray(data.hashtags)) {
+        console.error('❌ No hashtags array in response:', data);
+        throw new Error('Response không chứa hashtags');
+      }
+      
+      const hashtagsString = data.hashtags.join(' ');
+      console.log('📝 Setting hashtags to UI:', hashtagsString);
+      setHashtags(hashtagsString);
       
       // Show success message
-      setValidationErrors([]);
+      showToast({
+        type: 'success',
+        title: 'Tạo hashtags thành công!',
+        message: 'AI đã tạo hashtags phù hợp cho bài đăng của bạn'
+      });
+      
+      // Refresh AI usage stats after successful AI call
+      if (onAIUsageUpdate) {
+        onAIUsageUpdate();
+      }
+      // Also refresh local stats
+      await fetchAIUsageStats();
     } catch (error) {
       console.error('Auto hashtags error:', error);
-      setValidationErrors([
-        error instanceof Error ? error.message : 'Lỗi khi tạo hashtags tự động'
-      ]);
+      showToast({
+        type: 'error',
+        title: 'Lỗi tạo hashtags',
+        message: error instanceof Error ? error.message : 'Lỗi khi tạo hashtags tự động'
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -690,11 +1049,9 @@ export default function EnhancedComposeModal({
     const currentTitle = isVideo ? hook : title;
     const currentContent = isVideo ? sub : primaryText;
     
-    // Reset validation errors
-    setValidationErrors([]);
+    // Validation
     const errors: string[] = [];
     
-    // Validation
     if (!currentTitle.trim()) {
       errors.push(isVideo ? 'Vui lòng nhập Hook!' : 'Vui lòng nhập tiêu đề!');
     }
@@ -708,7 +1065,11 @@ export default function EnhancedComposeModal({
     }
     
     if (errors.length > 0) {
-      setValidationErrors(errors);
+      showToast({
+        type: 'error',
+        title: 'Thiếu thông tin bắt buộc',
+        message: errors.join('\n')
+      });
       return;
     }
     
@@ -748,6 +1109,13 @@ export default function EnhancedComposeModal({
         }
       });
       
+      // Show success message
+      showToast({
+        type: 'success',
+        title: 'Tạo bài đăng thành công!',
+        message: 'Bài đăng đã được lên lịch và sẽ được đăng tự động'
+      });
+      
       // Reset form only if not editing
       if (!editingPost) {
         resetForm();
@@ -761,12 +1129,31 @@ export default function EnhancedComposeModal({
       
       // Handle post limit exceeded error
       if (error instanceof Error && error.message.includes('Post limit exceeded')) {
-        setValidationErrors(['Bạn đã hết giới hạn số bài đăng trong tháng. Nâng cấp để đăng không giới hạn!']);
+        showToast({
+          type: 'error',
+          title: 'Hết lượt đăng bài',
+          message: 'Bạn đã hết giới hạn số bài đăng trong tháng.',
+          action: {
+            label: 'Nâng cấp tài khoản',
+            onClick: () => {
+              console.log('Upgrade account');
+              // Handle upgrade logic here
+            }
+          }
+        });
       } else if ((error as any)?.status === 429) {
         const errorData = (error as any)?.data;
-        setValidationErrors([errorData?.message || 'Bạn đã vượt quá giới hạn số bài đăng trong tháng.']);
+        showToast({
+          type: 'error',
+          title: 'Vượt quá giới hạn',
+          message: errorData?.message || 'Bạn đã vượt quá giới hạn số bài đăng trong tháng.'
+        });
       } else {
-        setValidationErrors(['Có lỗi xảy ra khi tạo bài đăng. Vui lòng thử lại.']);
+        showToast({
+          type: 'error',
+          title: 'Lỗi tạo bài đăng',
+          message: 'Có lỗi xảy ra khi tạo bài đăng. Vui lòng thử lại.'
+        });
       }
     } finally {
       setIsSubmitting(false);
@@ -791,7 +1178,8 @@ export default function EnhancedComposeModal({
     setSelectedChannels(new Set(['fb', 'ig']));
     setBrandColor('#0ea5e9');
     setRatio('1:1');
-    setPlatform('Instagram');
+    setPlatform('Facebook Page');
+    setPreviewDevice('mobile');
   };
 
   if (!isOpen) return null;
@@ -863,19 +1251,19 @@ export default function EnhancedComposeModal({
               {activeTab === "social" && (
                 <>
                   {/* Platform Selection */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                    {["Facebook", "Instagram", "TikTok", "YouTube"].map((p) => (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    {Object.entries(PROVIDERS).map(([key, provider]) => (
                       <button
-                        key={p}
+                        key={key}
                         type="button"
-                        onClick={() => setPlatform(p)}
+                        onClick={() => setPlatform(provider.label)}
                         className={`px-3 py-2 rounded-xl text-sm border transition ${
-                          platform === p
+                          platform === provider.label
                             ? "bg-blue-600 text-white border-blue-600"
                             : "bg-white text-gray-800 border-gray-300 hover:bg-gray-50"
                         }`}
                       >
-                        {p}
+                        {provider.label}
                       </button>
                     ))}
                   </div>
@@ -1027,10 +1415,10 @@ export default function EnhancedComposeModal({
 
               {/* Title and CTA */}
               <div className="grid md:grid-cols-2 gap-4">
-                <Field label="Tiêu đề / Hook" required={true} hint="">
+                <Field label="Tiêu đề / Hook" required={true} hint="🤖 Đầu vào chính cho AI tạo caption & hashtag">
                   <input 
                     className="w-full border rounded-xl px-3 py-2" 
-                    placeholder="Ví dụ: Siêu sale 9.9" 
+                    placeholder="Ví dụ: Siêu sale 9.9 - 50% off cho tất cả sản phẩm!" 
                     value={title} 
                     onChange={(e) => setTitle(e.target.value)} 
                   />
@@ -1053,14 +1441,23 @@ export default function EnhancedComposeModal({
                   value={primaryText} 
                   onChange={(e) => setPrimaryText(e.target.value)} 
                 />
+                
+                {/* AI Limit Warning */}
+                <AILimitWarning />
+                
                 <div className="flex gap-2 mt-2">
                   <PermissionGate feature="ai" fallback={
                     <Button variant="outline" onClick={() => {}} disabled>
                       <Sparkles className="w-4 h-4 mr-1" /> Gợi ý caption (Premium)
                     </Button>
                   }>
-                    <Button variant="outline" onClick={autoCaption}>
-                      <Sparkles className="w-4 h-4 mr-1" /> Gợi ý caption (AI)
+                    <Button 
+                      variant="outline" 
+                      onClick={autoCaption}
+                      disabled={!title.trim() || isSubmitting}
+                    >
+                      <Sparkles className="w-4 h-4 mr-1" /> 
+                      {!title.trim() ? 'Nhập tiêu đề trước' : 'Gợi ý caption (AI)'}
                     </Button>
                   </PermissionGate>
                   
@@ -1069,8 +1466,14 @@ export default function EnhancedComposeModal({
                       <Hash className="w-4 h-4 mr-1" /> Sinh hashtag (Premium)
                     </Button>
                   }>
-                    <Button variant="outline" onClick={autoHashtags}>
-                      <Hash className="w-4 h-4 mr-1" /> Sinh hashtag
+                    <Button 
+                      variant="outline" 
+                      onClick={autoHashtags}
+                      disabled={!title.trim() || !primaryText.trim() || isSubmitting}
+                    >
+                      <Hash className="w-4 h-4 mr-1" /> 
+                      {!title.trim() ? 'Nhập tiêu đề trước' : 
+                       !primaryText.trim() ? 'Tạo caption trước' : 'Sinh hashtag (AI)'}
                     </Button>
                   </PermissionGate>
                 </div>
@@ -1152,8 +1555,7 @@ export default function EnhancedComposeModal({
                 <div className="mb-2 flex items-center justify-between">
                   <span className="text-sm font-medium">Thời gian đăng</span>
                   <PermissionGate 
-                    feature="scheduling" 
-                    subFeature="aiOptimized"
+                    feature="ai"
                     fallback={
                       <Button 
                         variant="outline" 
@@ -1170,9 +1572,12 @@ export default function EnhancedComposeModal({
                       variant="outline" 
                       onClick={suggestOptimalTime}
                       className="text-xs px-2 py-1"
+                      disabled={!title.trim() || !primaryText.trim() || !hashtags.trim() || isSubmitting}
                     >
                       <Clock className="w-3 h-3 mr-1" />
-                      Gợi ý thời gian (AI)
+                      {!title.trim() ? 'Nhập tiêu đề trước' :
+                       !primaryText.trim() ? 'Tạo caption trước' :
+                       !hashtags.trim() ? 'Tạo hashtag trước' : 'Gợi ý thời gian (AI)'}
                     </Button>
                   </PermissionGate>
                 </div>
@@ -1239,45 +1644,30 @@ export default function EnhancedComposeModal({
                   )}
                 </Button>
               </div>
-              
-              {/* Validation Errors */}
-              {validationErrors.length > 0 && (
-                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                  <div className="flex items-start gap-2">
-                    <span className="text-red-500 text-lg">⚠️</span>
-                    <div>
-                      <h4 className="text-red-800 font-medium mb-1">
-                        Vui lòng kiểm tra lại:
-                      </h4>
-                      <ul className="text-red-700 text-sm space-y-1">
-                        {validationErrors.map((error, index) => (
-                          <li key={index}>• {error}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  </div>
-                </div>
-              )}
                 </>
               )}
 
               {/* Video Form */}
               {activeTab === "video" && (
                 <>
-                  {/* Video Platform Selection */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                    {["TikTok", "Instagram Reels", "YouTube Shorts", "Facebook Reels"].map((p) => (
+                  {/* Video Platform Selection - Based on actual supported providers */}
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    {[
+                      { key: "fb_video", label: "Facebook Page Video" },
+                      { key: "ig_reels", label: "Instagram Reels" },
+                      { key: "zalo_video", label: "Zalo OA Video" }
+                    ].map((p) => (
                       <button
-                        key={p}
+                        key={p.key}
                         type="button"
-                        onClick={() => setVideoPlatform(p)}
+                        onClick={() => setVideoPlatform(p.label)}
                         className={`px-3 py-2 rounded-xl text-sm border transition ${
-                          videoPlatform === p
+                          videoPlatform === p.label
                             ? "bg-blue-600 text-white border-blue-600"
                             : "bg-white text-gray-800 border-gray-300 hover:bg-gray-50"
                         }`}
                       >
-                        {p}
+                        {p.label}
                       </button>
                     ))}
                   </div>
@@ -1427,25 +1817,6 @@ export default function EnhancedComposeModal({
                       )}
                     </Button>
                   </div>
-                  
-                  {/* Validation Errors */}
-                  {validationErrors.length > 0 && (
-                    <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                      <div className="flex items-start gap-2">
-                        <span className="text-red-500 text-lg">⚠️</span>
-                        <div>
-                          <h4 className="text-red-800 font-medium mb-1">
-                            Vui lòng kiểm tra lại:
-                          </h4>
-                          <ul className="text-red-700 text-sm space-y-1">
-                            {validationErrors.map((error, index) => (
-                              <li key={index}>• {error}</li>
-                            ))}
-                          </ul>
-                        </div>
-                      </div>
-                    </div>
-                  )}
                 </>
               )}
             </div>
@@ -1453,13 +1824,25 @@ export default function EnhancedComposeModal({
             {/* Right: Preview */}
             <div className="space-y-3">
               <div className="flex items-center gap-2">
-                <Button variant="ghost" onClick={() => {}}>
+                <Button 
+                  variant={previewDevice === 'mobile' ? "primary" : "ghost"} 
+                  onClick={() => setPreviewDevice('mobile')}
+                  className={previewDevice === 'mobile' ? 'bg-blue-600 text-white' : ''}
+                >
                   <Smartphone className="w-4 h-4 mr-1" /> Mobile
                 </Button>
-                <Button variant="ghost" onClick={() => {}}>
+                <Button 
+                  variant={previewDevice === 'tablet' ? "primary" : "ghost"} 
+                  onClick={() => setPreviewDevice('tablet')}
+                  className={previewDevice === 'tablet' ? 'bg-blue-600 text-white' : ''}
+                >
                   <Tablet className="w-4 h-4 mr-1" /> Tablet
                 </Button>
-                <Button variant="ghost" onClick={() => {}}>
+                <Button 
+                  variant={previewDevice === 'desktop' ? "primary" : "ghost"} 
+                  onClick={() => setPreviewDevice('desktop')}
+                  className={previewDevice === 'desktop' ? 'bg-blue-600 text-white' : ''}
+                >
                   <Monitor className="w-4 h-4 mr-1" /> Desktop
                 </Button>
                 <div className="ml-auto text-sm text-gray-500">

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useImperativeHandle, forwardRef } from 'react';
 import { Brain, Zap, TrendingUp } from 'lucide-react';
 
 interface AIUsageStats {
@@ -17,14 +17,14 @@ interface AIUsageIndicatorProps {
   showDetails?: boolean;
 }
 
-export default function AIUsageIndicator({ className = '', showDetails = false }: AIUsageIndicatorProps) {
+export interface AIUsageIndicatorRef {
+  refresh: () => void;
+}
+
+const AIUsageIndicator = forwardRef<AIUsageIndicatorRef, AIUsageIndicatorProps>(function AIUsageIndicator({ className = '', showDetails = false }, ref) {
   const [stats, setStats] = useState<AIUsageStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    fetchUsageStats();
-  }, []);
 
   const fetchUsageStats = async () => {
     try {
@@ -44,6 +44,15 @@ export default function AIUsageIndicator({ className = '', showDetails = false }
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    fetchUsageStats();
+  }, []);
+
+  // Expose refresh method via ref
+  useImperativeHandle(ref, () => ({
+    refresh: fetchUsageStats
+  }));
 
   if (loading) {
     return (
@@ -197,4 +206,6 @@ export default function AIUsageIndicator({ className = '', showDetails = false }
       )}
     </div>
   );
-}
+});
+
+export default AIUsageIndicator;

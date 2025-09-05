@@ -5,14 +5,16 @@ import AIUsageIndicator from '../shared/AIUsageIndicator';
 import RoleBadge from '../shared/RoleBadge';
 import PostUsageIndicator from '../shared/PostUsageIndicator';
 import { UserAvatarDropdown } from '../shared/UserAvatarDropdown';
+import { AIUsageIndicatorRef } from '../shared/AIUsageIndicator';
 
 interface TopbarProps {
   onOpenCompose: () => void;
   currentTab: string;
   onTabChange: (_tab: string) => void;
+  aiUsageIndicatorRef?: React.RefObject<AIUsageIndicatorRef>;
 }
 
-export default function Topbar({ onOpenCompose, currentTab, onTabChange }: TopbarProps) {
+export default function Topbar({ onOpenCompose, currentTab, onTabChange, aiUsageIndicatorRef }: TopbarProps) {
   return (
     <div className="flex items-center justify-between border-b bg-white px-4 py-3">
       <div className="flex items-center gap-4">
@@ -27,7 +29,7 @@ export default function Topbar({ onOpenCompose, currentTab, onTabChange }: Topba
       </div>
       <div className="flex items-center gap-3">
         <PostUsageIndicator className="hidden sm:flex" />
-        <AIUsageIndicator className="hidden sm:flex" />
+        <AIUsageIndicator ref={aiUsageIndicatorRef} className="hidden sm:flex" />
         <RoleBadge size="sm" className="hidden md:flex" />
         <button 
           onClick={onOpenCompose}

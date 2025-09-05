@@ -79,9 +79,9 @@ export async function checkAIRateLimit(
       allowed: true,
       stats: {
         dailyUsage: 0,
-        dailyLimit: 2,
+        dailyLimit: 0, // Updated to match new free tier (no AI)
         monthlyUsage: 0,
-        monthlyLimit: 60,
+        monthlyLimit: 0,
         userRole: 'free',
         allowed: true
       },

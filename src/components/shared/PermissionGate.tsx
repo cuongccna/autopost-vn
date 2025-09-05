@@ -155,6 +155,11 @@ export default function PermissionGate({
             title: 'Templates không giới hạn',
             description: 'Truy cập toàn bộ thư viện mẫu nội dung chuyên nghiệp',
           };
+        case 'ai':
+          return {
+            title: 'Tính năng AI Premium',
+            description: 'Sử dụng AI để tạo nội dung và hashtag tự động',
+          };
         default:
           return {
             title: 'Tính năng Premium',

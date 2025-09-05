@@ -44,8 +44,8 @@ export const ROLE_PERMISSIONS: Record<UserRole, FeaturePermissions> = {
       monthlyLimit: 10,
     },
     ai: {
-      dailyLimit: 2,
-      monthlyLimit: 60,
+      dailyLimit: 3, // Allow 3 AI requests per day for free users
+      monthlyLimit: 60, // Allow 60 AI requests per month for free users
     },
   },
   professional: {
@@ -67,8 +67,8 @@ export const ROLE_PERMISSIONS: Record<UserRole, FeaturePermissions> = {
       monthlyLimit: -1, // unlimited
     },
     ai: {
-      dailyLimit: 20,
-      monthlyLimit: 600,
+      dailyLimit: 50, // Updated to match database limits
+      monthlyLimit: 1000, // Updated to match database limits
     },
   },
   enterprise: {
@@ -117,7 +117,7 @@ export const UPGRADE_PRICING = {
       'Báo cáo nâng cao + xuất PDF',
       'Không giới hạn templates',
       'Không giới hạn bài đăng',
-      '20 AI requests/ngày',
+      '50 AI requests/ngày, 1000/tháng',
     ],
   },
   enterprise: {
@@ -148,6 +148,15 @@ export function hasPermission(
   }
   
   const featurePermissions = permissions[feature] as any;
+  
+  // Special handling for AI feature
+  if (feature === 'ai') {
+    if (subFeature) {
+      return featurePermissions[subFeature] === true;
+    }
+    // For AI without subFeature, check if user has any AI limits
+    return featurePermissions.dailyLimit > 0 || featurePermissions.dailyLimit === -1;
+  }
   
   if (subFeature) {
     return featurePermissions[subFeature] === true;

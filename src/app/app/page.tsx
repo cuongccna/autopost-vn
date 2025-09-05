@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Sidebar from '@/components/layout/Sidebar';
 import Topbar from '@/components/layout/Topbar';
 import StatsCards from '@/components/shared/StatsCards';
@@ -16,6 +16,7 @@ import Settings from '@/components/features/Settings';
 import AddAccountModal from '@/components/features/AddAccountModal';
 import { ToastContainer, useToast } from '@/components/shared/Toast';
 import { PROVIDERS, mapProvidersToAPI } from '@/lib/constants';
+import { AIUsageIndicatorRef } from '@/components/shared/AIUsageIndicator';
 
 // Types
 interface Post {
@@ -142,6 +143,9 @@ export default function AppPage() {
   const [editingPost, setEditingPost] = useState<Post | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const { toasts, toast, removeToast } = useToast();
+  
+  // Ref for refreshing AI usage stats
+  const aiUsageIndicatorRef = useRef<AIUsageIndicatorRef>(null);
 
   // Fetch posts from API on component mount
   useEffect(() => {
@@ -327,6 +331,13 @@ export default function AppPage() {
     setCurrentTab(tab);
     if (['calendar', 'queue', 'analytics'].includes(tab)) {
       setCurrentMainTab(tab);
+    }
+  };
+
+  // Callback to refresh AI usage stats after AI usage
+  const handleAIUsageUpdate = () => {
+    if (aiUsageIndicatorRef.current) {
+      aiUsageIndicatorRef.current.refresh();
     }
   };
 
@@ -685,6 +696,7 @@ export default function AppPage() {
           onOpenCompose={() => setIsComposeOpen(true)} 
           currentTab={currentTab}
           onTabChange={handleTabChange}
+          aiUsageIndicatorRef={aiUsageIndicatorRef}
         />
         
         <div className="grid flex-1 grid-rows-[auto,1fr] gap-4 p-4">
@@ -726,6 +738,7 @@ export default function AppPage() {
         goldenHours={settings.golden}
         defaultDateTime={selectedDateForCompose}
         editingPost={editingPost}
+        onAIUsageUpdate={handleAIUsageUpdate}
       />
       
       <AddAccountModal
