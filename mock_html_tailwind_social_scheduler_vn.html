@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AutoPost VN — Mock HTML (Tailwind)</title>
+  <!-- Tailwind CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    /* Fallback khi thiếu plugin line-clamp */
+    .clamp-2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  </style>
+</head>
+<body class="min-h-screen bg-gray-50 text-gray-900">
+  <div class="flex h-screen w-full">
+    <!-- Sidebar -->
+    <aside class="hidden w-72 flex-col border-r bg-white p-4 md:flex">
+      <div class="mb-6 flex items-center gap-2">
+        <div class="h-8 w-8 rounded-xl bg-indigo-600"></div>
+        <div class="text-lg font-bold">AutoPost VN</div>
+      </div>
+      <nav class="space-y-1" id="sidebarNav">
+        <button data-tab="calendar" class="navbtn w-full rounded-xl px-3 py-2 text-left hover:bg-gray-50">
+          <span class="mr-2 inline-flex h-4 w-4 align-middle">📅</span>
+          Lịch & Lên lịch
+        </button>
+        <button data-tab="queue" class="navbtn w-full rounded-xl px-3 py-2 text-left hover:bg-gray-50">
+          <span class="mr-2 inline-flex h-4 w-4 align-middle">📄</span>
+          Hàng đợi & Nhật ký
+        </button>
+        <button data-tab="analytics" class="navbtn w-full rounded-xl px-3 py-2 text-left hover:bg-gray-50">
+          <span class="mr-2 inline-flex h-4 w-4 align-middle">📈</span>
+          Phân tích
+        </button>
+        <button data-tab="accounts" class="navbtn w-full rounded-xl px-3 py-2 text-left hover:bg-gray-50">
+          <span class="mr-2 inline-flex h-4 w-4 align-middle">👥</span>
+          Tài khoản
+        </button>
+        <button data-tab="settings" class="navbtn w-full rounded-xl px-3 py-2 text-left hover:bg-gray-50">
+          <span class="mr-2 inline-flex h-4 w-4 align-middle">⚙️</span>
+          Cài đặt
+        </button>
+      </nav>
+      <div class="mt-auto rounded-xl bg-gradient-to-br from-indigo-50 to-white p-3 text-sm">
+        <div class="font-medium">Gợi ý giờ vàng hôm nay</div>
+        <div class="mt-2 flex flex-wrap gap-1.5" id="goldenSuggestSidebar"></div>
+      </div>
+    </aside>
+
+    <!-- Main -->
+    <main class="flex min-w-0 flex-1 flex-col">
+      <!-- Topbar -->
+      <div class="flex items-center justify-between border-b bg-white px-4 py-3">
+        <div class="relative hidden md:block">
+          <input class="w-80 rounded-xl border border-gray-200 py-2 pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Tìm bài, kênh, lỗi…" />
+          <span class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">🔎</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <button id="openCompose" class="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700">
+            ➕ Tạo bài đăng
+          </button>
+          <div class="h-8 w-8 rounded-full bg-gray-200"></div>
+        </div>
+      </div>
+
+      <!-- Content -->
+      <div class="grid flex-1 grid-rows-[auto,1fr] gap-4 p-4">
+        <!-- Quick stats -->
+        <div id="stats" class="grid grid-cols-1 gap-3 sm:grid-cols-3"></div>
+
+        <div class="grid grid-cols-1 gap-4 lg:grid-cols-3">
+          <div class="space-y-4 lg:col-span-2">
+            <div class="flex items-center gap-2">
+              <button data-tab="calendar" class="tabbtn rounded-full px-3 py-1.5 text-sm ring-1">Lịch</button>
+              <button data-tab="queue" class="tabbtn rounded-full px-3 py-1.5 text-sm ring-1">Hàng đợi</button>
+              <button data-tab="analytics" class="tabbtn rounded-full px-3 py-1.5 text-sm ring-1">Phân tích</button>
+            </div>
+
+            <!-- Calendar -->
+            <section id="tab-calendar" class="rounded-2xl border bg-white p-4 shadow-sm">
+              <div class="mb-3 flex items-center justify-between">
+                <div class="text-base font-semibold">Lịch tuần</div>
+                <div class="text-sm text-gray-500">Kéo‑thả (mock), click để xem chi tiết</div>
+              </div>
+              <div id="calendarGrid" class="grid grid-cols-1 gap-3 md:grid-cols-7"></div>
+            </section>
+
+            <!-- Queue -->
+            <section id="tab-queue" class="hidden rounded-2xl border bg-white p-4 shadow-sm">
+              <div class="mb-3 flex items-center gap-2">
+                <div class="text-base font-semibold">Hàng đợi</div>
+                <span id="queueCount" class="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">0</span>
+              </div>
+              <div id="queueList" class="divide-y"></div>
+            </section>
+
+            <!-- Analytics -->
+            <section id="tab-analytics" class="hidden rounded-2xl border bg-white p-6 shadow-sm">
+              <div class="grid grid-cols-1 gap-3 sm:grid-cols-3" id="analyticsCards"></div>
+              <div class="mt-4 text-sm text-gray-500">Khu vực biểu đồ (mock): tương tác theo kênh, khung giờ hiệu quả, tỉ lệ lỗi.</div>
+            </section>
+
+            <!-- Accounts -->
+            <section id="tab-accounts" class="hidden rounded-2xl border bg-white p-4 shadow-sm">
+              <div class="mb-3 flex items-center justify-between">
+                <div class="text-base font-semibold">Quản lý tài khoản & kênh</div>
+                <div class="text-xs text-gray-500">Mẹo: Kết nối FB Page, IG Biz, Zalo OA bằng OAuth</div>
+              </div>
+              <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <!-- Connected accounts detail -->
+                <div>
+                  <h4 class="mb-2 font-medium">Đang kết nối</h4>
+                  <div id="accountsDetail" class="space-y-3"></div>
+                </div>
+                <!-- Connect new -->
+                <div>
+                  <h4 class="mb-2 font-medium">Kết nối mới</h4>
+                  <div class="space-y-2">
+                    <button id="connectFB" class="w-full rounded-xl border px-3 py-2 text-left hover:bg-gray-50">🔵 Kết nối Facebook Page</button>
+                    <button id="connectIG" class="w-full rounded-xl border px-3 py-2 text-left hover:bg-gray-50">🟣 Kết nối Instagram Business</button>
+                    <button id="connectZalo" class="w-full rounded-xl border px-3 py-2 text-left hover:bg-gray-50">🔷 Kết nối Zalo OA</button>
+                  </div>
+                  <div class="mt-4 rounded-xl bg-gray-50 p-3 text-xs text-gray-600">
+                    <div class="font-medium mb-1">Quyền & Scopes (mock)</div>
+                    <ul class="list-disc pl-5 space-y-1">
+                      <li>Facebook Page: pages_manage_posts, pages_read_engagement</li>
+                      <li>Instagram Biz: instagram_basic, content_publish</li>
+                      <li>Zalo OA: gửi bài viết, media</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <!-- Settings -->
+            <section id="tab-settings" class="hidden rounded-2xl border bg-white p-4 shadow-sm">
+              <div class="mb-3 flex items-center justify-between">
+                <div class="text-base font-semibold">Cài đặt Workspace</div>
+                <span class="text-xs text-gray-500">Tác động đến lập lịch & thông báo</span>
+              </div>
+              <form id="settingsForm" class="space-y-6">
+                <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <div class="space-y-3">
+                    <div class="font-medium">Thông báo</div>
+                    <label class="flex items-center justify-between rounded-xl border p-3">
+                      <span>Thông báo khi đăng thành công</span>
+                      <input id="notifySuccess" type="checkbox" class="h-4 w-4" />
+                    </label>
+                    <label class="flex items-center justify-between rounded-xl border p-3">
+                      <span>Thông báo khi đăng thất bại</span>
+                      <input id="notifyFail" type="checkbox" class="h-4 w-4" />
+                    </label>
+                    <label class="flex items-center justify-between rounded-xl border p-3">
+                      <span>Nhắc hạn token sắp hết</span>
+                      <input id="notifyToken" type="checkbox" class="h-4 w-4" />
+                    </label>
+                  </div>
+                  <div class="space-y-3">
+                    <div class="font-medium">Múi giờ & Giờ vàng mặc định</div>
+                    <label class="block text-sm">Múi giờ</label>
+                    <select id="timezone" class="w-full rounded-xl border p-2">
+                      <option value="Asia/Ho_Chi_Minh">Asia/Ho_Chi_Minh (GMT+7)</option>
+                      <option value="Asia/Bangkok">Asia/Bangkok (GMT+7)</option>
+                      <option value="Asia/Singapore">Asia/Singapore (GMT+8)</option>
+                    </select>
+                    <div class="grid grid-cols-3 gap-2">
+                      <input id="golden1" type="time" class="rounded-xl border p-2" />
+                      <input id="golden2" type="time" class="rounded-xl border p-2" />
+                      <input id="golden3" type="time" class="rounded-xl border p-2" />
+                    </div>
+                  </div>
+                </div>
+                <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <div class="space-y-3">
+                    <div class="font-medium">Giới hạn an toàn</div>
+                    <label class="block text-sm">Số bài tối đa/giờ</label>
+                    <input id="rateLimit" type="number" min="1" class="w-40 rounded-xl border p-2" />
+                    <p class="text-xs text-gray-500">Để tránh bị đánh dấu spam trên nền tảng.</p>
+                  </div>
+                </div>
+                <div class="flex items-center justify-end gap-2">
+                  <button type="button" id="resetSettings" class="rounded-xl border px-4 py-2 text-sm hover:bg-gray-50">Khôi phục mặc định</button>
+                  <button type="button" id="saveSettings" class="rounded-xl bg-indigo-600 px-4 py-2 text-sm text-white hover:bg-indigo-700">Lưu cài đặt</button>
+                </div>
+              </form>
+            </section>
+          </div>
+
+          <div class="space-y-4">
+            <section class="rounded-2xl border bg-white p-4 shadow-sm">
+              <div class="mb-3 text-base font-semibold">Tài khoản kết nối</div>
+              <div id="accounts" class="space-y-3"></div>
+              <button class="w-full rounded-xl border border-dashed p-2 text-sm text-gray-600 hover:bg-gray-50">+ Thêm tài khoản</button>
+            </section>
+
+            <section class="rounded-2xl border bg-white p-4 shadow-sm">
+              <div class="mb-2 text-base font-semibold">Nhật ký hệ thống</div>
+              <ul id="syslog" class="space-y-2 text-sm"></ul>
+            </section>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Compose Modal -->
+  <div id="composeModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/40 p-4">
+    <div class="w-full max-w-3xl rounded-2xl bg-white shadow-xl ring-1 ring-black/5">
+      <div class="flex items-center justify-between border-b p-4">
+        <h3 class="text-lg font-semibold">Tạo bài đăng</h3>
+        <button id="closeCompose" class="rounded-full p-2 hover:bg-gray-100" aria-label="Đóng">✕</button>
+      </div>
+      <div class="grid grid-cols-1 gap-4 p-4 md:grid-cols-3">
+        <div class="space-y-3 md:col-span-2">
+          <label class="text-sm font-medium">Nội dung</label>
+          <textarea id="caption" class="min-h-[140px] w-full rounded-xl border border-gray-200 p-3 outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Viết caption (tối đa 300 ký tự đề xuất)"></textarea>
+          <div class="rounded-xl border border-dashed p-4 text-sm text-gray-500">Kéo‑thả ảnh vào đây (mock) — hỗ trợ PNG/JPG. <span class="text-gray-400">(Tối đa 4 ảnh)</span></div>
+        </div>
+        <div class="space-y-4">
+          <div>
+            <div class="mb-2 text-sm font-medium">Kênh đăng</div>
+            <div id="channelButtons" class="flex flex-wrap gap-2"></div>
+          </div>
+          <div>
+            <div class="mb-2 text-sm font-medium">Thời gian đăng</div>
+            <input id="scheduleAt" type="datetime-local" class="w-full rounded-xl border border-gray-200 p-2 outline-none focus:ring-2 focus:ring-indigo-500" />
+            <div id="goldenButtons" class="mt-2 flex flex-wrap gap-2"></div>
+          </div>
+          <button id="submitSchedule" class="w-full rounded-xl bg-indigo-600 px-4 py-2 text-white shadow hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60" disabled>Lên lịch bài đăng</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ---------------------- Mock Data ----------------------
+    const PROVIDERS = {
+      fb: { label: 'Facebook Page', tag: 'FB', chip: 'bg-blue-100 text-blue-700' },
+      ig: { label: 'Instagram Biz', tag: 'IG', chip: 'bg-pink-100 text-pink-700' },
+      zalo: { label: 'Zalo OA', tag: 'ZL', chip: 'bg-sky-100 text-sky-700' },
+    };
+    /** @type {Array<{name:string,provider:'fb'|'ig'|'zalo',status:string}>} */
+    let accounts = [
+      { name: 'Fanpage Cửa Hàng A', provider: 'fb', status: 'Đã kết nối' },
+      { name: 'IG @shop.a', provider: 'ig', status: 'Đã kết nối' },
+      { name: 'Zalo OA /shopa', provider: 'zalo', status: 'Đã kết nối' },
+    ];
+
+    /** @type {Array<{id:string,title:string,datetime:string,providers:Array<'fb'|'ig'|'zalo'>,status:'scheduled'|'published'|'failed'}>} */
+    let posts = [
+      { id: '1', title: 'Khai trương deal 9.9 — Free ship', datetime: new Date().toISOString(), providers: ['fb','ig'], status: 'scheduled' },
+      { id: '2', title: 'Tips chăm fan Zalo OA', datetime: new Date(Date.now()+1000*60*60*4).toISOString(), providers: ['zalo'], status: 'scheduled' },
+      { id: '3', title: 'Ảnh sản phẩm mới (teaser)', datetime: new Date(Date.now()+1000*60*60*28).toISOString(), providers: ['fb','ig','zalo'], status: 'scheduled' },
+    ];
+
+    let syslogs = [
+      '✔️ 10:30 — Đăng bài lên Fanpage Cửa Hàng A thành công',
+      '⚠️ 09:15 — Token IG sắp hết hạn (5 ngày)',
+      'ℹ️ 08:00 — Cron: quét lịch đăng (15s)'
+    ];
+
+    // Settings state (mock)
+    const settings = {
+      notifySuccess: true,
+      notifyFail: true,
+      notifyToken: true,
+      timezone: 'Asia/Ho_Chi_Minh',
+      golden: ['09:00','12:30','20:00'],
+      rateLimit: 10,
+    };
+
+    let GOLDEN = [...settings.golden];
+
+    // ---------------------- Helpers ----------------------
+    function fmtTime(d){ return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); }
+    function fmtDay(d){ return `${d.getDate()}/${d.getMonth()+1}`; }
+    function toLocalInputValue(date){
+      const pad = n => String(n).padStart(2,'0');
+      const d = new Date(date);
+      return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    }
+    function startOfWeek(date){
+      const d = new Date(date); d.setHours(0,0,0,0); const wd = (d.getDay()+6)%7; d.setDate(d.getDate()-wd); return d;
+    }
+
+    function toast(msg){
+      // toast đơn giản bằng alert thay vì UI phức tạp
+      console.log('[toast]', msg); alert(msg);
+    }
+
+    // ---------------------- Renderers ----------------------
+    function renderStats(){
+      const el = document.getElementById('stats');
+      const success = Math.round(98);
+      const cards = [
+        { label: 'Bài đã lên lịch', value: posts.length },
+        { label: 'Tỉ lệ thành công', value: `${success}%` },
+        { label: 'Kênh kết nối', value: accounts.length },
+      ];
+      el.innerHTML = cards.map(c => `
+        <div class="rounded-2xl border bg-white p-4 shadow-sm">
+          <div class="text-sm text-gray-500">${c.label}</div>
+          <div class="mt-1 text-2xl font-semibold">${c.value}</div>
+          <div class="mt-2 h-2 w-full rounded-full bg-gray-100">
+            <div class="h-2 rounded-full bg-indigo-500" style="width:${typeof c.value==='number' ? Math.min(c.value*5,100) : 80}%"></div>
+          </div>
+        </div>`).join('');
+    }
+
+    function renderAccountsSidebar(){
+      const el = document.getElementById('accounts');
+      el.innerHTML = accounts.map(a => `
+        <div class="flex items-center justify-between rounded-xl border p-3">
+          <div>
+            <div class="font-medium">${a.name}</div>
+            <div class="mt-0.5 text-xs text-gray-500">${PROVIDERS[a.provider].label}</div>
+          </div>
+          <span class="rounded-full bg-emerald-50 px-2 py-0.5 text-xs text-emerald-700">${a.status}</span>
+        </div>`).join('');
+    }
+
+    function renderAccountsDetail(){
+      const el = document.getElementById('accountsDetail');
+      el.innerHTML = accounts.map((a,idx) => `
+        <div class="rounded-xl border p-3">
+          <div class="flex items-center justify-between">
+            <div>
+              <div class="font-medium">${a.name}</div>
+              <div class="mt-0.5 text-xs text-gray-500">${PROVIDERS[a.provider].label}</div>
+            </div>
+            <span class="rounded-full bg-emerald-50 px-2 py-0.5 text-xs text-emerald-700">${a.status}</span>
+          </div>
+          <div class="mt-2 flex items-center gap-2 text-xs">
+            <button data-idx="${idx}" class="acc-refresh rounded-lg border px-2 py-1 hover:bg-gray-50">Làm mới token</button>
+            <button data-idx="${idx}" class="acc-disconnect rounded-lg border px-2 py-1 hover:bg-gray-50">Ngắt kết nối</button>
+          </div>
+        </div>`).join('');
+
+      // bind actions
+      el.querySelectorAll('.acc-refresh').forEach(btn => btn.addEventListener('click', () => {
+        const i = +btn.dataset.idx; syslogs.unshift('ℹ️ ' + fmtTime(new Date()) + ` — Làm mới token cho ${accounts[i].name}`); renderAll(); toast('Đã gửi yêu cầu làm mới token');
+      }));
+      el.querySelectorAll('.acc-disconnect').forEach(btn => btn.addEventListener('click', () => {
+        const i = +btn.dataset.idx; const removed = accounts.splice(i,1)[0]; syslogs.unshift('⚠️ ' + fmtTime(new Date()) + ` — Ngắt kết nối ${removed.name}`); renderAll();
+      }));
+    }
+
+    function renderSyslog(){
+      const el = document.getElementById('syslog');
+      el.innerHTML = syslogs.map(s => `<li>${s}</li>`).join('');
+    }
+
+    function renderGoldenSuggest(){
+      const el = document.getElementById('goldenSuggestSidebar');
+      el.innerHTML = GOLDEN.map(g => `<span class="rounded-md bg-yellow-50 px-2 py-0.5 text-xs text-yellow-700 ring-1 ring-yellow-200">${g}</span>`).join('');
+    }
+
+    function renderCalendar(){
+      const el = document.getElementById('calendarGrid');
+      const start = startOfWeek(new Date());
+      const dayNames = ['T2','T3','T4','T5','T6','T7','CN'];
+      const colHtml = [];
+      for(let i=0;i<7;i++){
+        const d = new Date(start); d.setDate(start.getDate()+i);
+        const todays = posts
+          .filter(p => { const pd = new Date(p.datetime); return pd.getFullYear()===d.getFullYear() && pd.getMonth()===d.getMonth() && pd.getDate()===d.getDate(); })
+          .sort((a,b) => new Date(a.datetime) - new Date(b.datetime));
+        const cards = todays.map(p => `
+          <div class="group rounded-lg border p-2 hover:shadow">
+            <div class="flex items-center justify-between text-sm">
+              <div class="clamp-2 font-medium">${p.title}</div>
+              <span class="text-xs text-gray-500">${fmtTime(new Date(p.datetime))}</span>
+            </div>
+            <div class="mt-1 flex flex-wrap gap-1">
+              ${p.providers.map(k => `<span class="rounded-md px-1.5 py-0.5 text-[10px] ${PROVIDERS[k].chip}">${PROVIDERS[k].tag}</span>`).join('')}
+            </div>
+          </div>`).join('');
+        colHtml.push(`
+          <div class="rounded-xl border p-3">
+            <div class="mb-2 flex items-center justify-between">
+              <div class="font-medium">${dayNames[i]} ${fmtDay(d)}</div>
+              <span class="text-xs text-gray-400">${todays.length} bài</span>
+            </div>
+            <div class="space-y-2">${todays.length? cards : '<div class=\'text-sm text-gray-400\'>Trống</div>'}</div>
+          </div>`);
+      }
+      el.innerHTML = colHtml.join('');
+    }
+
+    function renderQueue(){
+      const el = document.getElementById('queueList');
+      const cnt = document.getElementById('queueCount');
+      const upcoming = [...posts].sort((a,b) => new Date(a.datetime) - new Date(b.datetime));
+      cnt.textContent = upcoming.length;
+      el.innerHTML = upcoming.map(p => `
+        <div class="flex items-center justify-between py-3">
+          <div>
+            <div class="font-medium">${p.title}</div>
+            <div class="mt-1 flex items-center gap-2 text-xs text-gray-500">
+              <span>${new Date(p.datetime).toLocaleString([], { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })}</span>
+              <span>•</span>
+              <span class="flex gap-1">${p.providers.map(k => `<span class="rounded-md px-1.5 py-0.5 text-[10px] ${PROVIDERS[k].chip}">${PROVIDERS[k].tag}</span>`).join('')}</span>
+            </div>
+          </div>
+          ${p.status==='scheduled' ? '<span class="rounded-full bg-indigo-50 px-2 py-0.5 text-xs text-indigo-700">scheduled</span>' : ''}
+        </div>`).join('');
+    }
+
+    function renderAnalytics(){
+      const el = document.getElementById('analyticsCards');
+      const byProvider = { fb:0, ig:0, zalo:0 };
+      posts.forEach(p => p.providers.forEach(k => byProvider[k]++));
+      const cards = [
+        { label: 'Bài/FB', value: byProvider.fb },
+        { label: 'Bài/IG', value: byProvider.ig },
+        { label: 'Bài/Zalo', value: byProvider.zalo },
+      ];
+      el.innerHTML = cards.map(c => `
+        <div class="rounded-2xl border bg-white p-4 shadow-sm">
+          <div class="text-sm text-gray-500">${c.label}</div>
+          <div class="mt-1 text-2xl font-semibold">${c.value}</div>
+          <div class="mt-2 h-2 w-full rounded-full bg-gray-100">
+            <div class="h-2 rounded-full bg-indigo-500" style="width:${Math.min(c.value*20,100)}%"></div>
+          </div>
+        </div>`).join('');
+    }
+
+    function renderSettings(){
+      document.getElementById('notifySuccess').checked = settings.notifySuccess;
+      document.getElementById('notifyFail').checked = settings.notifyFail;
+      document.getElementById('notifyToken').checked = settings.notifyToken;
+      document.getElementById('timezone').value = settings.timezone;
+      document.getElementById('golden1').value = settings.golden[0] || '09:00';
+      document.getElementById('golden2').value = settings.golden[1] || '12:30';
+      document.getElementById('golden3').value = settings.golden[2] || '20:00';
+      document.getElementById('rateLimit').value = settings.rateLimit;
+    }
+
+    function renderAll(){
+      renderStats();
+      renderAccountsSidebar();
+      renderAccountsDetail();
+      renderSyslog();
+      renderGoldenSuggest();
+      renderCalendar();
+      renderQueue();
+      renderAnalytics();
+      renderSettings();
+      updateTabActive();
+    }
+
+    // ---------------------- Tabs ----------------------
+    const tabIds = ['calendar','queue','analytics','accounts','settings'];
+    function showTab(name){
+      tabIds.forEach(t => {
+        const el = document.getElementById(`tab-${t}`);
+        if (el) el.classList.toggle('hidden', t!==name);
+      });
+      document.querySelectorAll('.tabbtn').forEach(btn => {
+        const active = btn.dataset.tab===name;
+        btn.className = `tabbtn rounded-full px-3 py-1.5 text-sm ring-1 ${active ? 'bg-indigo-600 text-white ring-indigo-600' : 'bg-white text-gray-700 ring-gray-200 hover:bg-gray-50'}`;
+      });
+      document.querySelectorAll('.navbtn').forEach(btn => {
+        const active = btn.dataset.tab===name;
+        btn.className = `navbtn w-full rounded-xl px-3 py-2 text-left hover:bg-gray-50 ${active ? 'bg-indigo-50 text-indigo-700' : ''}`;
+      });
+    }
+    function updateTabActive(){ showTab(currentTab); }
+    let currentTab = 'calendar';
+
+    // ---------------------- Compose Modal ----------------------
+    const compose = {
+      el: document.getElementById('composeModal'),
+      openBtn: document.getElementById('openCompose'),
+      closeBtn: document.getElementById('closeCompose'),
+      caption: document.getElementById('caption'),
+      scheduleAt: document.getElementById('scheduleAt'),
+      submit: document.getElementById('submitSchedule'),
+      channelWrap: document.getElementById('channelButtons'),
+      goldenWrap: document.getElementById('goldenButtons'),
+      channels: new Set(['fb','ig']),
+    };
+
+    function openCompose(){
+      compose.el.classList.remove('hidden');
+      compose.caption.value = '';
+      compose.scheduleAt.value = toLocalInputValue(new Date(Date.now()+60*60*1000));
+      compose.submit.disabled = true;
+      renderChannelButtons();
+      renderGoldenButtons();
+    }
+    function closeCompose(){ compose.el.classList.add('hidden'); }
+
+    function renderChannelButtons(){
+      compose.channelWrap.innerHTML = Object.keys(PROVIDERS).map(k => {
+        const active = compose.channels.has(k);
+        return `<button data-k="${k}" class="chbtn rounded-full border px-3 py-1 text-sm ${active? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'}">${PROVIDERS[k].label}</button>`;
+      }).join('');
+      compose.channelWrap.querySelectorAll('.chbtn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const k = btn.dataset.k; if (compose.channels.has(k)) compose.channels.delete(k); else compose.channels.add(k); renderChannelButtons();
+        });
+      });
+    }
+    function renderGoldenButtons(){
+      compose.goldenWrap.innerHTML = GOLDEN.map(g => `<button data-g="${g}" class="rounded-full bg-yellow-50 px-2.5 py-1 text-xs font-medium text-yellow-700 ring-1 ring-yellow-200 hover:bg-yellow-100">Giờ vàng: ${g}</button>`).join('');
+      compose.goldenWrap.querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
+        const [h,m] = b.dataset.g.split(':').map(Number);
+        const d = new Date(compose.scheduleAt.value || Date.now());
+        d.setHours(h,m,0,0); compose.scheduleAt.value = toLocalInputValue(d);
+      }));
+    }
+
+    compose.caption.addEventListener('input', () => {
+      compose.submit.disabled = !compose.caption.value.trim();
+    });
+
+    compose.openBtn.addEventListener('click', openCompose);
+    compose.closeBtn.addEventListener('click', closeCompose);
+
+    compose.submit.addEventListener('click', () => {
+      const title = compose.caption.value.trim(); if (!title) return;
+      const dt = new Date(compose.scheduleAt.value || Date.now());
+      const providers = Array.from(compose.channels);
+      posts.push({ id: Math.random().toString(36).slice(2), title: title.slice(0, 60), datetime: dt.toISOString(), providers, status: 'scheduled' });
+      syslogs.unshift('✔️ ' + fmtTime(new Date()) + ' — Lên lịch bài mới thành công');
+      renderAll();
+      closeCompose();
+    });
+
+    // ---------------------- Accounts actions ----------------------
+    function connectIfMissing(provider, name){
+      if (!accounts.some(a => a.provider===provider)){
+        accounts.push({ name, provider, status: 'Đã kết nối' });
+        syslogs.unshift('✔️ ' + fmtTime(new Date()) + ` — Kết nối ${name} thành công`);
+        renderAll();
+        toast('Kết nối thành công');
+      } else {
+        toast('Tài khoản của nhà cung cấp này đã tồn tại');
+      }
+    }
+
+    document.addEventListener('click', (e) => {
+      if (e.target && e.target.id==='connectFB') connectIfMissing('fb','Fanpage Mới');
+      if (e.target && e.target.id==='connectIG') connectIfMissing('ig','IG @shop.new');
+      if (e.target && e.target.id==='connectZalo') connectIfMissing('zalo','Zalo OA /new');
+    });
+
+    // ---------------------- Settings actions ----------------------
+    document.getElementById('saveSettings').addEventListener('click', () => {
+      settings.notifySuccess = document.getElementById('notifySuccess').checked;
+      settings.notifyFail = document.getElementById('notifyFail').checked;
+      settings.notifyToken = document.getElementById('notifyToken').checked;
+      settings.timezone = document.getElementById('timezone').value;
+      const g1 = document.getElementById('golden1').value || '09:00';
+      const g2 = document.getElementById('golden2').value || '12:30';
+      const g3 = document.getElementById('golden3').value || '20:00';
+      settings.golden = [g1,g2,g3];
+      settings.rateLimit = Math.max(1, parseInt(document.getElementById('rateLimit').value || '10', 10));
+      GOLDEN = [...settings.golden];
+      syslogs.unshift('✔️ ' + fmtTime(new Date()) + ' — Lưu cài đặt thành công');
+      renderAll();
+      toast('Đã lưu cài đặt');
+    });
+
+    document.getElementById('resetSettings').addEventListener('click', () => {
+      settings.notifySuccess = true;
+      settings.notifyFail = true;
+      settings.notifyToken = true;
+      settings.timezone = 'Asia/Ho_Chi_Minh';
+      settings.golden = ['09:00','12:30','20:00'];
+      settings.rateLimit = 10;
+      GOLDEN = [...settings.golden];
+      renderAll();
+      toast('Đã khôi phục mặc định');
+    });
+
+    // ---------------------- Events ----------------------
+    document.querySelectorAll('.tabbtn').forEach(btn => btn.addEventListener('click', () => { currentTab = btn.dataset.tab; showTab(currentTab); }));
+    document.querySelectorAll('.navbtn').forEach(btn => btn.addEventListener('click', () => { const t = btn.dataset.tab; if (t) { currentTab = t; showTab(currentTab); } }));
+
+    // ---------------------- Initial ----------------------
+    renderAll();
+  </script>
+</body>
+</html>

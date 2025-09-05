@@ -1,0 +1,1 @@
+import 'dotenv/config';import{runScheduler}from'@/lib/scheduler';runScheduler().then(r=>console.log('Scheduler result',r)).catch(e=>{console.error(e);process.exit(1);});

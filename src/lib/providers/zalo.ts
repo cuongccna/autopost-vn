@@ -1,0 +1,1 @@
+export async function publishToZaloOA(){return{ok:true,external_post_id:'zl_demo'};}

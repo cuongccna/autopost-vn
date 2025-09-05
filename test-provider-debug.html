@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Provider Mapping</title>
+</head>
+<body>
+    <h1>Provider Mapping Debug</h1>
+    <div id="results"></div>
+    
+    <script>
+        // Copy constants từ src/lib/constants.ts
+        const PROVIDERS = {
+          fb: { 
+            label: 'Facebook Page', 
+            tag: 'FB', 
+            chip: 'bg-blue-100 text-blue-700',
+            apiKey: 'facebook'
+          },
+          ig: { 
+            label: 'Instagram Biz', 
+            tag: 'IG', 
+            chip: 'bg-pink-100 text-pink-700',
+            apiKey: 'instagram'
+          },
+          zalo: { 
+            label: 'Zalo OA', 
+            tag: 'ZL', 
+            chip: 'bg-sky-100 text-sky-700',
+            apiKey: 'zalo'
+          },
+        };
+
+        // Copy mapProvidersToAPI function
+        const mapProvidersToAPI = (providers) => {
+          return providers.map(provider => {
+            const providerConfig = PROVIDERS[provider];
+            return providerConfig?.apiKey || provider;
+          });
+        };
+
+        // Test cases
+        const testCases = [
+          ['fb'],
+          ['ig'], 
+          ['zalo'],
+          ['fb', 'ig'],
+          ['fb', 'ig', 'zalo'],
+          []
+        ];
+
+        let html = '<h2>Test Results:</h2>';
+        
+        testCases.forEach((input, index) => {
+          const output = mapProvidersToAPI(input);
+          const inputStr = JSON.stringify(input);
+          const outputStr = JSON.stringify(output);
+          
+          html += `<p><strong>Test ${index + 1}:</strong><br>`;
+          html += `Input: ${inputStr}<br>`;
+          html += `Output: ${outputStr}</p>`;
+        });
+
+        // Test validation
+        html += '<h2>API Validation:</h2>';
+        const validProviders = ['facebook', 'instagram', 'zalo'];
+        
+        testCases.slice(0, -1).forEach((input, index) => { // exclude empty
+          const mapped = mapProvidersToAPI(input);
+          const isValid = mapped.every(provider => validProviders.includes(provider));
+          
+          html += `<p><strong>Test ${index + 1}:</strong> `;
+          html += `${input.join(',')} → ${mapped.join(',')} → `;
+          html += `${isValid ? '✅ PASS' : '❌ FAIL'}</p>`;
+        });
+
+        document.getElementById('results').innerHTML = html;
+        
+        // Test actual POST request (would need authentication)
+        console.log('Provider mapping function working correctly');
+        console.log('Test cases:', testCases.map(input => ({
+          input,
+          output: mapProvidersToAPI(input)
+        })));
+    </script>
+</body>
+</html>

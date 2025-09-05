@@ -1,0 +1,46 @@
+/* Calendar drag and drop animations */
+.dragging {
+  transform: rotate(5deg) scale(1.05);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+  z-index: 1000;
+}
+
+.drop-zone {
+  transition: all 0.2s ease;
+}
+
+.drop-zone.drag-over {
+  background-color: rgba(59, 130, 246, 0.1);
+  border-color: rgb(59, 130, 246);
+  transform: scale(1.02);
+}
+
+.post-item {
+  transition: all 0.2s ease;
+}
+
+.post-item:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+/* Calendar responsive improvements */
+@media (max-width: 768px) {
+  .calendar-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .calendar-day {
+    min-height: 150px;
+  }
+}
+
+@media (max-width: 480px) {
+  .calendar-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .calendar-day {
+    min-height: 120px;
+  }
+}

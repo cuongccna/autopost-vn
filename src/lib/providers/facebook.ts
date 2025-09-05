@@ -1,0 +1,1 @@
+export async function publishToFacebookPage(){return{ok:true,external_post_id:'fb_demo'};}

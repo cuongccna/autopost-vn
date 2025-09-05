@@ -1,0 +1,1 @@
+export async function publishToInstagramBiz(){return{ok:true,external_post_id:'ig_demo'};}
