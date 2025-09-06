@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { uploadImage, deleteImage } from '@/lib/supabase/storage';
 
 interface UploadedImage {
@@ -15,27 +15,61 @@ interface UploadedImage {
 interface ImageUploadProps {
   userId: string;
   maxImages?: number;
-  onImagesChange?: (_images: UploadedImage[]) => void;
+  onImagesChange?: (images: UploadedImage[]) => void;
   className?: string;
+  initialImages?: UploadedImage[]; // Re-add for proper initialization
 }
 
 export default function ImageUpload({ 
   userId, 
   maxImages = 4, 
   onImagesChange,
-  className = '' 
+  className = '',
+  initialImages = []
 }: ImageUploadProps) {
-  const [images, setImages] = useState<UploadedImage[]>([]);
+  const [images, setImages] = useState<UploadedImage[]>(initialImages);
   const [dragActive, setDragActive] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // Generate stable ID for file input
+  const [inputId] = useState(() => `real-upload-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`);
+  
+  // Update images when initialImages changes (for editing mode)
+  useEffect(() => {
+    if (initialImages.length > 0 && images.length === 0) {
+      console.log('📤 Setting initial images:', initialImages.length);
+      setImages(initialImages);
+      onImagesChange?.(initialImages);
+    }
+  }, [initialImages, images.length, onImagesChange]);
+  
+  // Debug: Check file input ref on mount
+  useEffect(() => {
+    console.log('📤 ImageUpload mounted, inputId:', inputId);
+    console.log('📤 fileInputRef on mount:', fileInputRef.current);
+    
+    const timer = setTimeout(() => {
+      console.log('📤 fileInputRef after timeout:', fileInputRef.current);
+    }, 100);
+    
+    return () => clearTimeout(timer);
+  }, [inputId]);
 
   // Handle file selection or drop
   const handleFiles = async (files: FileList | File[]) => {
     const fileArray = Array.from(files);
-    const remainingSlots = maxImages - images.length;
+    const successfulUploads = images.filter(img => !img.uploading && !img.error).length;
+    const remainingSlots = maxImages - successfulUploads;
     const filesToProcess = fileArray.slice(0, remainingSlots);
 
-    // Add files to state with uploading status
+    if (filesToProcess.length === 0) {
+      console.log('📤 No slots available for new images');
+      return;
+    }
+
+    console.log('📤 Adding new images to existing list. Current:', images.length, 'New:', filesToProcess.length);
+
+    // Add files to existing images (append, don't replace)
     const newImages: UploadedImage[] = filesToProcess.map(file => ({
       id: `temp-${Date.now()}-${Math.random()}`,
       file,
@@ -44,23 +78,23 @@ export default function ImageUpload({
       uploading: true
     }));
 
-    const updatedImages = [...images, ...newImages];
+    const updatedImages = [...images, ...newImages]; // Append to existing
     setImages(updatedImages);
     onImagesChange?.(updatedImages);
 
     // Upload each file
     for (let i = 0; i < newImages.length; i++) {
-      const imageIndex = images.length + i;
-      const file = newImages[i].file;
+      const tempImage = newImages[i];
+      const file = tempImage.file;
 
       try {
         const result = await uploadImage(file, userId);
         
         if (result.success) {
-          // Update the image with successful upload data
+          // Update the specific image by ID in the full list
           setImages(prev => {
-            const updated = prev.map((img, idx) => 
-              idx === imageIndex 
+            const updated = prev.map(img => 
+              img.id === tempImage.id 
                 ? { 
                     ...img, 
                     publicUrl: result.publicUrl!,
@@ -72,11 +106,12 @@ export default function ImageUpload({
             onImagesChange?.(updated);
             return updated;
           });
+          console.log('✅ Image uploaded successfully:', result.publicUrl);
         } else {
-          // Update with error
+          // Update with error by ID
           setImages(prev => {
-            const updated = prev.map((img, idx) => 
-              idx === imageIndex 
+            const updated = prev.map(img => 
+              img.id === tempImage.id 
                 ? { 
                     ...img, 
                     uploading: false,
@@ -87,12 +122,13 @@ export default function ImageUpload({
             onImagesChange?.(updated);
             return updated;
           });
+          console.error('❌ Image upload failed:', result.error);
         }
       } catch (error) {
-        // Handle unexpected errors
+        // Handle unexpected errors by ID
         setImages(prev => {
-          const updated = prev.map((img, idx) => 
-            idx === imageIndex 
+          const updated = prev.map(img => 
+            img.id === tempImage.id 
               ? { 
                   ...img, 
                   uploading: false,
@@ -103,6 +139,7 @@ export default function ImageUpload({
           onImagesChange?.(updated);
           return updated;
         });
+        console.error('❌ Unexpected upload error:', error);
       }
     }
   };
@@ -111,6 +148,8 @@ export default function ImageUpload({
   const handleDrag = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    console.log('🎯 ImageUpload drag event:', e.type);
+    
     if (e.type === 'dragenter' || e.type === 'dragover') {
       setDragActive(true);
     } else if (e.type === 'dragleave') {
@@ -130,7 +169,9 @@ export default function ImageUpload({
 
   // Handle file input change
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    console.log('📤 ImageUpload file input changed');
     if (e.target.files && e.target.files.length > 0) {
+      console.log('📤 Files selected:', e.target.files.length);
       handleFiles(e.target.files);
     }
   };
@@ -150,53 +191,58 @@ export default function ImageUpload({
     onImagesChange?.(newImages);
   };
 
-  // Trigger file input
-  const openFileInput = () => {
-    fileInputRef.current?.click();
-  };
-
-  const remainingSlots = maxImages - images.length;
+  const remainingSlots = maxImages - images.filter(img => !img.uploading && !img.error).length;
   const canAddMore = remainingSlots > 0;
 
   return (
     <div className={`space-y-3 ${className}`}>
       {/* Upload Area */}
       {canAddMore && (
-        <div
-          onDragEnter={handleDrag}
-          onDragLeave={handleDrag}
-          onDragOver={handleDrag}
-          onDrop={handleDrop}
-          onClick={openFileInput}
-          className={`
-            relative rounded-xl border-2 border-dashed p-6 text-center cursor-pointer
-            transition-all duration-200 ease-in-out
-            ${dragActive 
-              ? 'border-blue-400 bg-blue-50 text-blue-600' 
-              : 'border-gray-300 bg-gray-50 text-gray-600 hover:border-gray-400 hover:bg-gray-100'
-            }
-          `}
-        >
-          <div className="space-y-2">
-            <div className="text-3xl">📸</div>
-            <div className="text-sm font-medium">
-              Kéo‑thả ảnh vào đây, hỗ trợ PNG/JPG
-            </div>
-            <div className="text-xs text-gray-500">
-              (Tối đa {maxImages} ảnh • Còn lại: {remainingSlots})
-            </div>
-            <div className="text-xs text-gray-400">
-              hoặc click để chọn file
+        <div className="relative">
+          {/* Visual container */}
+          <div
+            className={`
+              rounded-xl border-2 border-dashed p-6 text-center cursor-pointer
+              transition-all duration-200 ease-in-out pointer-events-none
+              ${dragActive 
+                ? 'border-blue-400 bg-blue-50 text-blue-600' 
+                : 'border-gray-300 bg-gray-50 text-gray-600 hover:border-gray-400 hover:bg-gray-100'
+              }
+            `}
+            data-upload-area="real-upload"
+          >
+            <div className="space-y-2">
+              <div className="text-3xl">📸</div>
+              <div className="text-sm font-medium">
+                Kéo‑thả ảnh vào đây, hỗ trợ PNG/JPG
+              </div>
+              <div className="text-xs text-gray-500">
+                (Tối đa {maxImages} ảnh • Còn lại: {remainingSlots})
+              </div>
+              <div className="text-xs text-gray-400">
+                hoặc click để chọn file
+              </div>
             </div>
           </div>
           
+          {/* File input overlay - this will handle all clicks */}
           <input
             ref={fileInputRef}
             type="file"
             accept="image/png,image/jpeg,image/jpg,image/webp"
             multiple
             onChange={handleInputChange}
-            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+            onClick={(e) => {
+              console.log('📤 File input directly clicked!', e.type);
+            }}
+            onDragEnter={handleDrag}
+            onDragLeave={handleDrag}
+            onDragOver={handleDrag}
+            onDrop={handleDrop}
+            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+            data-component="real-upload-input"
+            id={inputId}
+            title="Click to select images"
           />
         </div>
       )}
@@ -268,7 +314,7 @@ export default function ImageUpload({
       {/* Status Info */}
       {images.length > 0 && (
         <div className="text-xs text-gray-500 text-center">
-          {images.filter(img => !img.uploading && !img.error).length} / {maxImages} ảnh đã tải lên
+          {images.filter(img => !img.uploading && !img.error).length} / {maxImages} ảnh đã tải lên thành công
           {images.some(img => img.uploading) && ' • Đang tải...'}
           {images.some(img => img.error) && ' • Có lỗi xảy ra'}
         </div>

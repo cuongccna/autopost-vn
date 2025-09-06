@@ -94,20 +94,29 @@ const ToolbarButton = ({ icon: Icon, label, active, onClick }: {
   icon: any;
   label: string;
   active: boolean;
-  onClick: () => void;
-}) => (
-  <button
-    type="button"
-    onClick={onClick}
-    title={label}
-    className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-sm transition ${
-      active ? "bg-gray-900 text-white border-gray-900" : "bg-white text-gray-800 border-gray-300 hover:bg-gray-50"
-    }`}
-  >
-    <Icon className="w-4 h-4" />
-    <span className="hidden sm:inline">{label}</span>
-  </button>
-);
+  onClick: (e?: React.MouseEvent) => void;
+}) => {
+  const handleClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    onClick(e);
+  };
+  
+  return (
+    <button
+      type="button"
+      onClick={handleClick}
+      title={label}
+      className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-sm transition ${
+        active ? "bg-gray-900 text-white border-gray-900" : "bg-white text-gray-800 border-gray-300 hover:bg-gray-50"
+      }`}
+      style={{ pointerEvents: 'auto', zIndex: 10 }}
+    >
+      <Icon className="w-4 h-4" />
+      <span className="hidden sm:inline">{label}</span>
+    </button>
+  );
+};
 
 // --- Helpers ---
 const RATIOS = ["1:1", "4:5", "9:16", "16:9"];
@@ -291,6 +300,8 @@ export default function EnhancedComposeModal({
   const [scheduleAt, setScheduleAt] = useState('');
   const [selectedChannels, setSelectedChannels] = useState<Set<string>>(new Set(['fb', 'ig']));
   const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([]);
+  const [initialEditImages, setInitialEditImages] = useState<UploadedImage[]>([]); // Store initial images for edit mode
+  const [previewImages, setPreviewImages] = useState<string[]>([]); // For design preview
   const [isSubmitting, setIsSubmitting] = useState(false);
   
   // Toast for notifications
@@ -642,8 +653,15 @@ export default function EnhancedComposeModal({
           path: url,
           uploading: false
         }));
-        setUploadedImages(existingImages);
+        setInitialEditImages(existingImages); // Store for ImageUpload initialization
+        setUploadedImages(existingImages); // Also set current state
+      } else {
+        setInitialEditImages([]);
+        setUploadedImages([]);
       }
+    } else {
+      // Reset when not editing
+      setInitialEditImages([]);
     }
   }, [editingPost]);
   
@@ -998,21 +1016,156 @@ export default function EnhancedComposeModal({
     }
   };
 
-  const handleImageTool = () => {
+  const handleImageTool = (e?: React.MouseEvent) => {
+    console.log('🖼️ Preview image tool clicked - THIS SHOULD NOT HAPPEN WHEN CLICKING PREVIEW IMAGES');
+    
+    // Stop event propagation to prevent interference with ImageUpload
+    if (e) {
+      e.stopPropagation();
+      e.preventDefault();
+    }
+    
+    // Check if real upload area is being clicked to avoid conflicts
+    const target = e?.target as HTMLElement;
+    if (target && target.closest('[data-upload-area="real-upload"]')) {
+      console.log('🚫 Real upload area clicked, ignoring preview tool');
+      return;
+    }
+    
+    // Check if preview image area is being clicked
+    if (target && (target.closest('[data-preview-image-grid]') || target.closest('[data-preview-image]'))) {
+      console.log('🚫 Preview image area clicked, ignoring tool');
+      return;
+    }
+    
+    // Prevent multiple dialogs by checking if already processing
+    if (activeTools.has('image')) {
+      console.log('🔒 Image tool already active, preventing duplicate dialog');
+      return;
+    }
+    
     toggleTool('image');
-    // Trigger file upload dialog
+    
+    // Show toast instruction
+    showToast({
+      type: 'info',
+      title: 'Thêm ảnh thiết kế',
+      message: 'Chọn ảnh để hiển thị trong preview (khác với ảnh upload thật)',
+      duration: 3000
+    });
+    
+    // Create file input immediately
     const fileInput = document.createElement('input');
+    fileInput.id = `preview-image-input-${Date.now()}`;
     fileInput.type = 'file';
     fileInput.accept = 'image/*';
     fileInput.multiple = true;
-    fileInput.onchange = (e) => {
+    fileInput.style.position = 'fixed';
+    fileInput.style.top = '-9999px';
+    fileInput.style.left = '-9999px';
+    fileInput.setAttribute('data-component', 'preview-tool-input');
+    
+    // Add to DOM temporarily
+    document.body.appendChild(fileInput);
+    
+    let dialogClosed = false;
+    
+    fileInput.onchange = async (e) => {
+      if (dialogClosed) return;
+      dialogClosed = true;
+      
       const files = (e.target as HTMLInputElement).files;
-      if (files) {
-        // This would integrate with the existing ImageUpload component
-        console.log('Files selected:', files.length);
+      if (files && files.length > 0) {
+        try {
+          // Convert files to URLs for preview
+          const newPreviewUrls: string[] = [];
+          
+          for (let i = 0; i < Math.min(files.length, 3); i++) { // Max 3 images for preview
+            const file = files[i];
+            const imageUrl = URL.createObjectURL(file);
+            newPreviewUrls.push(imageUrl);
+          }
+          
+          setPreviewImages(prev => [...prev, ...newPreviewUrls].slice(0, 3)); // Keep max 3
+          
+          showToast({
+            type: 'success',
+            title: 'Ảnh thiết kế đã thêm!',
+            message: `${newPreviewUrls.length} ảnh đã được thêm vào preview mockup`,
+            duration: 2000
+          });
+          
+          console.log('🖼️ Preview images updated:', newPreviewUrls.length, 'images');
+        } catch (error) {
+          console.error('Error processing preview images:', error);
+          showToast({
+            type: 'error',
+            title: 'Lỗi xử lý ảnh',
+            message: 'Không thể thêm ảnh vào preview'
+          });
+        }
+      }
+      
+      // Clean up
+      try {
+        document.body.removeChild(fileInput);
+      } catch (e) {
+        // Element might already be removed
+      }
+      toggleTool('image'); // Reset tool state
+    };
+    
+    // Handle user canceling dialog
+    const cleanup = () => {
+      if (!dialogClosed) {
+        dialogClosed = true;
+        try {
+          document.body.removeChild(fileInput);
+        } catch (e) {
+          // Element already removed
+        }
+        toggleTool('image'); // Reset tool state
       }
     };
-    fileInput.click();
+    
+    // Listen for focus to detect dialog close (rough approximation)
+    const focusHandler = () => {
+      setTimeout(() => {
+        if (!fileInput.files?.length && !dialogClosed) {
+          cleanup();
+        }
+      }, 100);
+    };
+    
+    window.addEventListener('focus', focusHandler, { once: true });
+    
+    // Trigger file dialog
+    try {
+      // Try immediate click first
+      fileInput.click();
+      console.log('✅ File dialog opened successfully');
+    } catch (error) {
+      console.error('❌ Error opening file dialog:', error);
+      
+      // Alternative approach: use setTimeout
+      setTimeout(() => {
+        try {
+          fileInput.click();
+          console.log('✅ Alternative file dialog opened');
+        } catch (retryError) {
+          console.error('❌ Alternative approach failed:', retryError);
+          cleanup();
+        }
+      }, 100);
+    }
+    
+    // Cleanup after timeout as fallback
+    setTimeout(() => {
+      if (!dialogClosed) {
+        cleanup();
+      }
+      window.removeEventListener('focus', focusHandler);
+    }, 30000); // 30 second timeout
   };
 
   const handleColorTool = () => {
@@ -1169,6 +1322,15 @@ export default function EnhancedComposeModal({
     setSub("");
     setOverlayCTA("Xem ngay");
     setUploadedImages([]);
+    
+    // Clean up preview images URLs to prevent memory leaks
+    previewImages.forEach(url => {
+      if (url.startsWith('blob:')) {
+        URL.revokeObjectURL(url);
+      }
+    });
+    setPreviewImages([]);
+    
     setTemplate(null);
     setActiveTools(new Set());
     setShowColorPicker(false);
@@ -1185,8 +1347,19 @@ export default function EnhancedComposeModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="w-full max-w-7xl max-h-[95vh] rounded-2xl bg-white shadow-xl ring-1 ring-black/5 overflow-hidden">
+    <div 
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      onClick={(e) => {
+        console.log('🔍 Modal backdrop clicked:', e.target);
+      }}
+    >
+      <div 
+        className="w-full max-w-7xl max-h-[95vh] rounded-2xl bg-white shadow-xl ring-1 ring-black/5 overflow-hidden"
+        onClick={(e) => {
+          console.log('🔍 Modal content clicked:', e.target, e.currentTarget);
+          // Check if this triggers any unwanted behavior
+        }}
+      >
         <div className="max-h-[95vh] overflow-y-auto">
           {/* Header */}
           <div className="flex items-center justify-between border-b p-4">
@@ -1276,12 +1449,20 @@ export default function EnhancedComposeModal({
                       active={activeTools.has('text')} 
                       onClick={handleTextTool} 
                     />
-                    <ToolbarButton 
-                      icon={ImageIcon} 
-                      label="Ảnh" 
-                      active={activeTools.has('image')} 
-                      onClick={handleImageTool} 
-                    />
+                    <div className="relative">
+                      <ToolbarButton 
+                        icon={ImageIcon} 
+                        label="Thêm ảnh preview" 
+                        active={activeTools.has('image')} 
+                        onClick={(e) => handleImageTool(e)} 
+                      />
+                      {previewImages.length > 0 && (
+                        <div className="absolute -top-1 -right-1 bg-blue-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                          {previewImages.length}
+                        </div>
+                      )}
+                    </div>
+                    
                     <ToolbarButton 
                       icon={Palette} 
                       label="Màu sắc" 
@@ -1497,7 +1678,140 @@ export default function EnhancedComposeModal({
                     maxImages={4}
                     onImagesChange={setUploadedImages}
                     className="mt-2"
+                    initialImages={initialEditImages} // Pass initial images for edit mode
+                    key={editingPost?.id || 'new'} // Force re-render when editing different post
                   />
+                  
+                  {/* Image selection for preview */}
+                  {uploadedImages.length > 0 && (
+                    <div className="mt-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-sm font-medium text-gray-700">Chọn ảnh cho preview:</h4>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => {
+                              // Select all uploaded images for preview
+                              const imageUrls = uploadedImages
+                                .filter(img => img.publicUrl && !img.uploading)
+                                .map(img => img.publicUrl)
+                                .slice(0, 3);
+                              
+                              if (imageUrls.length > 0) {
+                                setPreviewImages(imageUrls);
+                                showToast({
+                                  type: 'success',
+                                  title: 'Đã chọn tất cả ảnh!',
+                                  message: `${imageUrls.length} ảnh đã được thêm vào preview`
+                                });
+                              }
+                            }}
+                            className="px-2 py-1 text-xs bg-blue-50 text-blue-600 rounded hover:bg-blue-100 transition-colors"
+                          >
+                            Chọn tất cả
+                          </button>
+                          <button
+                            onClick={() => {
+                              setPreviewImages([]);
+                              showToast({
+                                type: 'info',
+                                title: 'Đã xóa preview',
+                                message: 'Tất cả ảnh preview đã được xóa'
+                              });
+                            }}
+                            className="px-2 py-1 text-xs bg-gray-50 text-gray-600 rounded hover:bg-gray-100 transition-colors"
+                          >
+                            Xóa tất cả
+                          </button>
+                        </div>
+                      </div>
+                      
+                      {/* Individual image selection */}
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2" data-preview-image-grid>
+                        {uploadedImages
+                          .filter(img => img.publicUrl && !img.uploading)
+                          .map((img, index) => {
+                            const isSelected = previewImages.includes(img.publicUrl);
+                            return (
+                              <div
+                                key={img.id}
+                                data-preview-image
+                                className={`relative group cursor-pointer rounded-lg overflow-hidden border-2 transition-all ${
+                                  isSelected 
+                                    ? 'border-blue-500 ring-2 ring-blue-200' 
+                                    : 'border-gray-200 hover:border-blue-300'
+                                }`}
+                                onClick={(e) => {
+                                  // Prevent event bubbling to avoid triggering parent handlers
+                                  e.stopPropagation();
+                                  e.preventDefault();
+                                  // Stop other listeners on same element
+                                  (e.nativeEvent as any).stopImmediatePropagation?.();
+                                  
+                                  console.log('🖼️ Preview image clicked - should NOT trigger file dialog');
+                                  
+                                  if (isSelected) {
+                                    // Remove from preview
+                                    setPreviewImages(prev => prev.filter(url => url !== img.publicUrl));
+                                    showToast({
+                                      type: 'info',
+                                      title: 'Đã bỏ chọn ảnh',
+                                      message: 'Ảnh đã được xóa khỏi preview'
+                                    });
+                                  } else {
+                                    // Add to preview (max 3)
+                                    if (previewImages.length < 3) {
+                                      setPreviewImages(prev => [...prev, img.publicUrl]);
+                                      showToast({
+                                        type: 'success',
+                                        title: 'Đã thêm ảnh',
+                                        message: 'Ảnh đã được thêm vào preview'
+                                      });
+                                    } else {
+                                      showToast({
+                                        type: 'warning',
+                                        title: 'Giới hạn 3 ảnh',
+                                        message: 'Preview chỉ hỗ trợ tối đa 3 ảnh'
+                                      });
+                                    }
+                                  }
+                                }}
+                              >
+                                <img
+                                  src={img.publicUrl}
+                                  alt={`Upload ${index + 1}`}
+                                  className="w-full h-16 object-cover"
+                                />
+                                
+                                {/* Selection indicator */}
+                                <div className={`absolute top-1 right-1 w-5 h-5 rounded-full border-2 border-white flex items-center justify-center ${
+                                  isSelected ? 'bg-blue-500' : 'bg-gray-400 opacity-60'
+                                }`}>
+                                  {isSelected && (
+                                    <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                    </svg>
+                                  )}
+                                </div>
+                                
+                                {/* Preview position indicator */}
+                                {isSelected && (
+                                  <div className="absolute bottom-1 left-1 bg-blue-500 text-white text-xs px-1 rounded">
+                                    {previewImages.indexOf(img.publicUrl) + 1}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })
+                        }
+                      </div>
+                      
+                      {previewImages.length > 0 && (
+                        <div className="text-xs text-gray-500 mt-2">
+                          ✓ {previewImages.length} ảnh đã chọn cho preview
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </Field>
               )}
 
@@ -1888,6 +2202,71 @@ export default function EnhancedComposeModal({
                       </h3>
                     </div>
 
+                    {/* Preview Images */}
+                    {previewImages.length > 0 && (
+                      <div className="absolute top-16 left-4 right-4 bottom-20">
+                        <div className="h-full rounded-lg overflow-hidden bg-white/10 backdrop-blur-sm">
+                          {previewImages.length === 1 ? (
+                            // Single image - full size
+                            <img 
+                              src={previewImages[0]} 
+                              alt="Preview" 
+                              className="w-full h-full object-cover rounded-lg"
+                            />
+                          ) : previewImages.length === 2 ? (
+                            // Two images - side by side
+                            <div className="flex gap-1 h-full">
+                              {previewImages.map((img, idx) => (
+                                <img 
+                                  key={idx}
+                                  src={img} 
+                                  alt={`Preview ${idx + 1}`} 
+                                  className="flex-1 h-full object-cover rounded-lg"
+                                />
+                              ))}
+                            </div>
+                          ) : (
+                            // Three or more images - grid layout
+                            <div className="grid grid-cols-2 gap-1 h-full">
+                              <img 
+                                src={previewImages[0]} 
+                                alt="Preview 1" 
+                                className="col-span-2 h-2/3 w-full object-cover rounded-lg"
+                              />
+                              <img 
+                                src={previewImages[1]} 
+                                alt="Preview 2" 
+                                className="h-full w-full object-cover rounded-lg"
+                              />
+                              {previewImages[2] && (
+                                <img 
+                                  src={previewImages[2]} 
+                                  alt="Preview 3" 
+                                  className="h-full w-full object-cover rounded-lg"
+                                />
+                              )}
+                            </div>
+                          )}
+                          
+                          {/* Clear images button */}
+                          <button
+                            onClick={() => {
+                              setPreviewImages([]);
+                              showToast({
+                                type: 'info',
+                                title: 'Đã xóa ảnh preview',
+                                message: 'Tất cả ảnh preview đã được xóa'
+                              });
+                            }}
+                            className="absolute top-2 right-2 bg-red-500 hover:bg-red-600 text-white p-1 rounded-full shadow-lg transition-colors"
+                            title="Xóa tất cả ảnh preview"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
                     {/* Mock body */}
                     <div className="absolute left-4 right-4 bottom-4">
                       <p className="bg-white/90 rounded-xl px-3 py-2 text-sm text-gray-800 line-clamp-4">
@@ -1951,6 +2330,115 @@ export default function EnhancedComposeModal({
                       <div className="bg-purple-600 text-white px-3 py-1 rounded-full text-xs font-medium">
                         {overlayCTA || "Xem ngay"}
                       </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Preview Image Controls */}
+                {activeTab === "social" && previewImages.length > 0 && (
+                  <div className="mt-3 p-3 bg-gray-50 rounded-lg">
+                    <div className="flex items-center justify-between mb-2">
+                      <h4 className="text-sm font-medium text-gray-700">
+                        Preview Images ({previewImages.length}/3)
+                      </h4>
+                      <button
+                        onClick={() => {
+                          // Clear preview images and cleanup URLs
+                          previewImages.forEach(url => {
+                            if (url.startsWith('blob:')) {
+                              URL.revokeObjectURL(url);
+                            }
+                          });
+                          setPreviewImages([]);
+                          showToast({
+                            type: 'info',
+                            title: 'Đã xóa preview',
+                            message: 'Tất cả ảnh preview đã được xóa'
+                          });
+                        }}
+                        className="text-xs text-red-600 hover:text-red-700"
+                      >
+                        Xóa tất cả
+                      </button>
+                    </div>
+                    
+                    <div className="flex gap-2 overflow-x-auto pb-2">
+                      {previewImages.map((imageUrl, index) => (
+                        <div
+                          key={`preview-${index}`}
+                          className="relative flex-shrink-0 group"
+                        >
+                          <img
+                            src={imageUrl}
+                            alt={`Preview ${index + 1}`}
+                            className="w-16 h-16 object-cover rounded border"
+                          />
+                          
+                          {/* Position indicator */}
+                          <div className="absolute -top-1 -left-1 w-5 h-5 bg-blue-500 text-white text-xs rounded-full flex items-center justify-center font-medium">
+                            {index + 1}
+                          </div>
+                          
+                          {/* Remove button */}
+                          <button
+                            onClick={() => {
+                              const newImages = [...previewImages];
+                              const removedUrl = newImages.splice(index, 1)[0];
+                              
+                              // Cleanup blob URL if needed
+                              if (removedUrl.startsWith('blob:')) {
+                                URL.revokeObjectURL(removedUrl);
+                              }
+                              
+                              setPreviewImages(newImages);
+                              showToast({
+                                type: 'info',
+                                title: 'Đã xóa ảnh',
+                                message: `Ảnh ${index + 1} đã được xóa khỏi preview`
+                              });
+                            }}
+                            className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                          
+                          {/* Move buttons for reordering */}
+                          {previewImages.length > 1 && (
+                            <div className="absolute bottom-0 left-0 right-0 flex opacity-0 group-hover:opacity-100 transition-opacity">
+                              {index > 0 && (
+                                <button
+                                  onClick={() => {
+                                    const newImages = [...previewImages];
+                                    [newImages[index], newImages[index - 1]] = [newImages[index - 1], newImages[index]];
+                                    setPreviewImages(newImages);
+                                  }}
+                                  className="flex-1 bg-blue-500 text-white text-xs py-1 hover:bg-blue-600"
+                                  title="Di chuyển lên"
+                                >
+                                  ↑
+                                </button>
+                              )}
+                              {index < previewImages.length - 1 && (
+                                <button
+                                  onClick={() => {
+                                    const newImages = [...previewImages];
+                                    [newImages[index], newImages[index + 1]] = [newImages[index + 1], newImages[index]];
+                                    setPreviewImages(newImages);
+                                  }}
+                                  className="flex-1 bg-blue-500 text-white text-xs py-1 hover:bg-blue-600"
+                                  title="Di chuyển xuống"
+                                >
+                                  ↓
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                    
+                    <div className="text-xs text-gray-500 mt-2">
+                      💡 Click vào ảnh để xóa, sử dụng nút mũi tên để sắp xếp lại thứ tự
                     </div>
                   </div>
                 )}
