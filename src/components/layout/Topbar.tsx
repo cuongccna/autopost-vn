@@ -1,5 +1,6 @@
 'use client';
 
+import React from 'react';
 import MobileSidebar from './MobileSidebar';
 import AIUsageIndicator from '../shared/AIUsageIndicator';
 import RoleBadge from '../shared/RoleBadge';

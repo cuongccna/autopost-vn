@@ -53,10 +53,21 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'User ID not found' }, { status: 401 });
     }
 
+    // Get user's actual role from database
+    const supabaseAdmin = sbServer(true); // Use service role
+    const { data: userData, error: userError } = await supabaseAdmin
+      .from('users')
+      .select('role')
+      .eq('id', userId)
+      .single();
+
+    const userRole = userData?.role || 'free';
+    console.log(`User ${userId} has role: ${userRole}`);
+
     // Check post rate limit before processing
-    const userRole = 'free'; // TODO: Get actual user role from database/session
     const rateLimitCheck = await checkPostRateLimit(userId, userRole);
     if (!rateLimitCheck.allowed) {
+      console.log(`Rate limit exceeded for user ${userId}:`, rateLimitCheck);
       return NextResponse.json(
         { 
           error: 'Post limit exceeded',

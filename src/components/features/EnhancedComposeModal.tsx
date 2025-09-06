@@ -6,6 +6,7 @@ import { useSession } from 'next-auth/react';
 import { usePermissions } from '@/hooks/usePermissions';
 import PermissionGate from '@/components/shared/PermissionGate';
 import { useToast } from '@/components/ui/Toast';
+import { usePostRateLimit } from '@/hooks/usePostRateLimit';
 import { PROVIDERS } from '@/lib/constants';
 import ImageUpload from '@/components/ui/ImageUpload';
 import {
@@ -245,6 +246,7 @@ interface EnhancedComposeModalProps {
   defaultDateTime?: Date | null;
   editingPost?: Post | null;
   onAIUsageUpdate?: () => void; // New callback to refresh AI stats
+  onActivityLogsUpdate?: () => void; // New callback to refresh activity logs
 }
 
 export default function EnhancedComposeModal({ 
@@ -254,7 +256,8 @@ export default function EnhancedComposeModal({
   goldenHours: customGoldenHours, 
   defaultDateTime, 
   editingPost,
-  onAIUsageUpdate
+  onAIUsageUpdate,
+  onActivityLogsUpdate
 }: EnhancedComposeModalProps) {
   const { data: session } = useSession();
   
@@ -307,6 +310,15 @@ export default function EnhancedComposeModal({
   // Toast for notifications
   const { showToast } = useToast();
 
+  // Post rate limit hook
+  const { 
+    rateLimitData, 
+    checkRateLimit, 
+    canCreatePost, 
+    getBlockedReason, 
+    getRateLimitMessage 
+  } = usePostRateLimit();
+
   // Fetch AI usage stats on modal open
   const fetchAIUsageStats = async () => {
     try {
@@ -323,6 +335,8 @@ export default function EnhancedComposeModal({
   useEffect(() => {
     if (isOpen) {
       fetchAIUsageStats();
+      // Check rate limit when modal opens
+      checkRateLimit();
     }
   }, [isOpen]);
 
@@ -1193,6 +1207,28 @@ export default function EnhancedComposeModal({
     const currentTitle = isVideo ? hook : title;
     const currentContent = isVideo ? sub : primaryText;
     
+    // Check rate limit first (skip for editing existing posts)
+    if (!editingPost) {
+      const rateLimitCheck = await checkRateLimit();
+      if (!rateLimitCheck?.allowed) {
+        const reason = getBlockedReason();
+        showToast({
+          type: 'warning',
+          title: 'Đã hết giới hạn đăng bài',
+          message: reason || 'Bạn đã vượt quá giới hạn đăng bài.',
+          action: {
+            label: 'Nâng cấp tài khoản',
+            onClick: () => {
+              // TODO: Implement upgrade flow
+              console.log('Upgrade account clicked');
+            }
+          },
+          duration: 6000
+        });
+        return;
+      }
+    }
+    
     // Validation
     const errors: string[] = [];
     
@@ -1252,6 +1288,13 @@ export default function EnhancedComposeModal({
           template: template?.id
         }
       });
+      
+      // Refresh activity logs after successful action
+      if (onActivityLogsUpdate) {
+        setTimeout(() => {
+          onActivityLogsUpdate();
+        }, 500);
+      }
       
       // Show success message
       showToast({
@@ -1910,13 +1953,27 @@ export default function EnhancedComposeModal({
                       Đang tải ảnh...
                     </span>
                   )}
+                  {/* Rate limit status */}
+                  {rateLimitData && (
+                    <span className={`text-xs px-2 py-1 rounded-full ${
+                      rateLimitData.allowed 
+                        ? 'bg-green-100 text-green-700' 
+                        : 'bg-red-100 text-red-700'
+                    }`}>
+                      {getRateLimitMessage(rateLimitData)}
+                    </span>
+                  )}
                 </div>
                 
                 <Button
                   onClick={handleSubmit}
-                  disabled={isSubmitting || uploadedImages.some(img => img.uploading)}
+                  disabled={
+                    isSubmitting || 
+                    uploadedImages.some(img => img.uploading) ||
+                    (!editingPost && !canCreatePost()) // Disable for new posts if rate limited
+                  }
                   className={`px-6 py-2 font-medium transition-all flex items-center gap-2 ${
-                    isSubmitting 
+                    isSubmitting || (!editingPost && !canCreatePost())
                       ? 'bg-gray-400 cursor-not-allowed' 
                       : scheduleAt 
                       ? 'bg-blue-600 hover:bg-blue-700 text-white' 
@@ -2083,13 +2140,27 @@ export default function EnhancedComposeModal({
                           Đang tải media...
                         </span>
                       )}
+                      {/* Rate limit status */}
+                      {rateLimitData && (
+                        <span className={`text-xs px-2 py-1 rounded-full ${
+                          rateLimitData.allowed 
+                            ? 'bg-green-100 text-green-700' 
+                            : 'bg-red-100 text-red-700'
+                        }`}>
+                          {getRateLimitMessage(rateLimitData)}
+                        </span>
+                      )}
                     </div>
                     
                     <Button
                       onClick={handleSubmit}
-                      disabled={isSubmitting || uploadedImages.some(img => img.uploading)}
+                      disabled={
+                        isSubmitting || 
+                        uploadedImages.some(img => img.uploading) ||
+                        (!editingPost && !canCreatePost()) // Disable for new posts if rate limited
+                      }
                       className={`px-6 py-2 font-medium transition-all flex items-center gap-2 ${
-                        isSubmitting 
+                        isSubmitting || (!editingPost && !canCreatePost())
                           ? 'bg-gray-400 cursor-not-allowed' 
                           : scheduleAt 
                           ? 'bg-blue-600 hover:bg-blue-700 text-white' 

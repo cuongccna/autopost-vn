@@ -8,13 +8,18 @@ import TabSelector from '@/components/shared/TabSelector';
 import Calendar from '@/components/features/Calendar';
 import Queue from '@/components/features/Queue';
 import Analytics from '@/components/features/Analytics';
+import Activities from '@/components/features/Activities';
 import EnhancedComposeModal from '@/components/features/EnhancedComposeModal';
 import AccountsSidebar from '@/components/features/AccountsSidebar';
 import SystemLog from '@/components/features/SystemLog';
+import ActivityLogsWidget from '@/components/features/ActivityLogsWidget';
+import FullActivityLogs from '@/components/features/FullActivityLogs';
+import { ActivityLogsProvider, useActivityLogsRefresh } from '@/contexts/ActivityLogsContext';
 import AccountsManagement from '@/components/features/AccountsManagement';
 import Settings from '@/components/features/Settings';
 import AddAccountModal from '@/components/features/AddAccountModal';
 import { ToastContainer, useToast } from '@/components/shared/Toast';
+import { useActivityLogger } from '@/hooks/useActivityLogger';
 import { PROVIDERS, mapProvidersToAPI } from '@/lib/constants';
 import { AIUsageIndicatorRef } from '@/components/shared/AIUsageIndicator';
 
@@ -128,13 +133,25 @@ const mainTabs = [
   { id: 'calendar', label: 'Lịch' },
   { id: 'queue', label: 'Hàng đợi' },
   { id: 'analytics', label: 'Phân tích' },
+  { id: 'activities', label: 'Hoạt động' },
 ];
 
 export default function AppPage() {
+  return (
+    <ActivityLogsProvider>
+      <AppPageContent />
+    </ActivityLogsProvider>
+  );
+}
+
+function AppPageContent() {
+  const { logPostAction, logAccountAction, logWorkspaceAction } = useActivityLogger();
+  const { refreshActivityLogs } = useActivityLogsRefresh();
   const [currentTab, setCurrentTab] = useState('calendar');
   const [currentMainTab, setCurrentMainTab] = useState('calendar');
   const [isComposeOpen, setIsComposeOpen] = useState(false);
   const [isAddAccountOpen, setIsAddAccountOpen] = useState(false);
+  const [isFullActivityLogsOpen, setIsFullActivityLogsOpen] = useState(false);
   const [posts, setPosts] = useState<Post[]>([]);
   const [accounts, setAccounts] = useState(initialAccounts);
   const [logs, setLogs] = useState(initialLogs);
@@ -329,7 +346,7 @@ export default function AppPage() {
 
   const handleTabChange = (tab: string) => {
     setCurrentTab(tab);
-    if (['calendar', 'queue', 'analytics'].includes(tab)) {
+    if (['calendar', 'queue', 'analytics', 'activities'].includes(tab)) {
       setCurrentMainTab(tab);
     }
   };
@@ -414,6 +431,15 @@ export default function AppPage() {
       const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       const imageInfo = data.mediaUrls.length > 0 ? ` (${data.mediaUrls.length} ảnh)` : '';
       
+      // Log activity
+      const actionType = isEditing ? 'post_updated' : 'post_created';
+      logPostAction(actionType, postData, 'success').catch(console.error);
+      
+      // Refresh activity logs after successful action
+      setTimeout(() => {
+        refreshActivityLogs();
+      }, 500);
+      
       if (isEditing) {
         setLogs(prev => [`✔️ ${timeStr} — Cập nhật bài đăng thành công${imageInfo}`, ...prev]);
         toast.success(`Cập nhật bài đăng thành công!${imageInfo}`);
@@ -423,6 +449,22 @@ export default function AppPage() {
       }
     } catch (error: any) {
       console.error('Error creating/updating post:', error);
+      
+      // Only log failed activity if we have a valid post ID (when editing)
+      if (data.postId) {
+        const actionType = 'post_updated';
+        const postData: Post = {
+          id: data.postId,
+          title: data.title || data.content.slice(0, 60),
+          datetime: data.scheduleAt,
+          providers: data.channels,
+          status: 'failed',
+          content: data.content,
+          mediaUrls: data.mediaUrls || [],
+        };
+        logPostAction(actionType, postData, 'failed', error.message).catch(console.error);
+      }
+      
       const now = new Date();
       const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       const action = data.postId ? 'cập nhật' : 'tạo';
@@ -458,9 +500,23 @@ export default function AppPage() {
       }
 
       // Update local state only if API call succeeds
+      const updatedPost = posts.find(p => p.id === postId);
       setPosts(prev => prev.map(post => 
         post.id === postId ? { ...post, ...updates } : post
       ));
+      
+      // Log activity
+      if (updatedPost) {
+        logPostAction('post_updated', {
+          ...updatedPost,
+          ...updates
+        }, 'success').catch(console.error);
+        
+        // Refresh activity logs after successful action
+        setTimeout(() => {
+          refreshActivityLogs();
+        }, 500);
+      }
       
       const now = new Date();
       const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -476,6 +532,16 @@ export default function AppPage() {
       
     } catch (error: any) {
       console.error('Error updating post:', error);
+      
+      // Log failed activity
+      const updatedPost = posts.find(p => p.id === postId);
+      if (updatedPost) {
+        logPostAction('post_updated', {
+          ...updatedPost,
+          ...updates
+        }, 'failed', error.message).catch(console.error);
+      }
+      
       const now = new Date();
       const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       setLogs(prev => [`❌ ${timeStr} — Lỗi cập nhật bài: ${error.message}`, ...prev]);
@@ -500,6 +566,14 @@ export default function AppPage() {
       if (post) {
         setPosts(prev => prev.filter(p => p.id !== postId));
         
+        // Log successful deletion
+        logPostAction('post_deleted', post, 'success').catch(console.error);
+        
+        // Refresh activity logs after successful action
+        setTimeout(() => {
+          refreshActivityLogs();
+        }, 500);
+        
         const now = new Date();
         const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         setLogs(prev => [`🗑️ ${timeStr} — Đã xóa bài: ${post.title}`, ...prev]);
@@ -508,6 +582,13 @@ export default function AppPage() {
       
     } catch (error: any) {
       console.error('Error deleting post:', error);
+      
+      // Log failed deletion
+      const post = posts.find(p => p.id === postId);
+      if (post) {
+        logPostAction('post_deleted', post, 'failed', error.message).catch(console.error);
+      }
+      
       const now = new Date();
       const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       setLogs(prev => [`❌ ${timeStr} — Lỗi xóa bài: ${error.message}`, ...prev]);
@@ -561,6 +642,15 @@ export default function AppPage() {
     const account = accounts.find(acc => acc.id === accountId);
     if (account) {
       setAccounts(prev => prev.filter(acc => acc.id !== accountId));
+      
+      // Log account disconnection
+      logAccountAction('account_disconnected', account, 'success').catch(console.error);
+      
+      // Refresh activity logs after successful action
+      setTimeout(() => {
+        refreshActivityLogs();
+      }, 500);
+      
       const now = new Date();
       const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       setLogs(prev => [`⚠️ ${timeStr} — Ngắt kết nối ${account.name}`, ...prev]);
@@ -592,6 +682,14 @@ export default function AppPage() {
 
     setAccounts(prev => [...prev, newAccount]);
     
+    // Log account connection
+    logAccountAction('account_connected', newAccount, 'success').catch(console.error);
+    
+    // Refresh activity logs after successful action
+    setTimeout(() => {
+      refreshActivityLogs();
+    }, 500);
+    
     const now = new Date();
     const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     setLogs(prev => [`✔️ ${timeStr} — Kết nối ${newAccount.name} thành công`, ...prev]);
@@ -599,7 +697,30 @@ export default function AppPage() {
   };
 
   const handleSaveSettings = async (newSettings: typeof settings) => {
+    // Detect changes
+    const changes: Record<string, any> = {};
+    Object.keys(newSettings).forEach(key => {
+      if (newSettings[key as keyof typeof settings] !== settings[key as keyof typeof settings]) {
+        changes[key] = {
+          from: settings[key as keyof typeof settings],
+          to: newSettings[key as keyof typeof settings]
+        };
+      }
+    });
+
     setSettings(newSettings);
+    
+    // Log settings update
+    logWorkspaceAction('settings_updated', {
+      changes: Object.keys(changes),
+      settings_data: changes
+    }, 'success').catch(console.error);
+    
+    // Refresh activity logs after successful action
+    setTimeout(() => {
+      refreshActivityLogs();
+    }, 500);
+    
     const now = new Date();
     const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     setLogs(prev => [`✔️ ${timeStr} — Lưu cài đặt thành công`, ...prev]);
@@ -641,6 +762,8 @@ export default function AppPage() {
         return <Queue posts={posts} />;
       case 'analytics':
         return <Analytics posts={posts} />;
+      case 'activities':
+        return <Activities />;
       default:
         return (
           <Calendar 
@@ -655,7 +778,7 @@ export default function AppPage() {
   };
 
   const renderTabContent = () => {
-    if (['calendar', 'queue', 'analytics'].includes(currentTab)) {
+    if (['calendar', 'queue', 'analytics', 'activities'].includes(currentTab)) {
       return renderMainContent();
     }
     
@@ -721,7 +844,7 @@ export default function AppPage() {
                 onAddAccount={handleAddAccount}
                 connectedProviders={connectedProviders}
               />
-              <SystemLog logs={logs} />
+              <ActivityLogsWidget onViewAll={() => setIsFullActivityLogsOpen(true)} />
             </div>
           </div>
         </div>
@@ -739,6 +862,7 @@ export default function AppPage() {
         defaultDateTime={selectedDateForCompose}
         editingPost={editingPost}
         onAIUsageUpdate={handleAIUsageUpdate}
+        onActivityLogsUpdate={refreshActivityLogs}
       />
       
       <AddAccountModal
@@ -749,6 +873,11 @@ export default function AppPage() {
       />
       
       <ToastContainer toasts={toasts} onRemoveToast={removeToast} />
+      
+      <FullActivityLogs
+        isOpen={isFullActivityLogsOpen}
+        onClose={() => setIsFullActivityLogsOpen(false)}
+      />
     </div>
   );
 }

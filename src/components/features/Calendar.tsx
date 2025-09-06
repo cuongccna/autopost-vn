@@ -16,6 +16,7 @@ import {
   useDroppable,
 } from '@dnd-kit/core';
 import { PROVIDERS } from '@/lib/constants';
+import { useActivityLogger } from '@/hooks/useActivityLogger';
 import PostDetailModal from './PostDetailModal';
 
 interface Post {
@@ -35,14 +36,6 @@ interface CalendarProps {
   onDeletePost?: (_postId: string) => void;
   onEditPost?: (_post: Post) => void;
   onCreatePost?: (_date: Date) => void;
-}
-
-function startOfWeek(date: Date): Date {
-  const d = new Date(date);
-  d.setHours(0, 0, 0, 0);
-  const wd = (d.getDay() + 6) % 7;
-  d.setDate(d.getDate() - wd);
-  return d;
 }
 
 function formatTime(date: Date): string {
@@ -368,6 +361,7 @@ function DroppableColumn({ date, posts, dayName, dayIndex, onPostClick, onCreate
 }
 
 export default function Calendar({ posts, onUpdatePost, onDeletePost, onEditPost, onCreatePost }: CalendarProps) {
+  const { logPostAction } = useActivityLogger();
   const [activePost, setActivePost] = useState<Post | null>(null);
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
@@ -399,7 +393,7 @@ export default function Calendar({ posts, onUpdatePost, onDeletePost, onEditPost
     })
   );
 
-  const start = getStartOfWeekFromDate(currentWeek);
+  const start = getStartOfWeekFromDate(currentWeek, { weekStartsOn: 1 });
   const dayNames = isMobile 
     ? ['T 2', 'T 3', 'T 4', 'T 5', 'T 6', 'T 7', 'CN']
     : ['T 2', 'T 3', 'T 4', 'T 5', 'T 6', 'T 7', 'CN'];
@@ -459,6 +453,12 @@ export default function Calendar({ posts, onUpdatePost, onDeletePost, onEditPost
       onUpdatePost(draggedPost.id, {
         datetime: newDateTime.toISOString()
       });
+      
+      // Log activity
+      logPostAction('post_updated', {
+        ...draggedPost,
+        datetime: newDateTime.toISOString()
+      }, 'success').catch(console.error);
     }
   };
 
@@ -469,9 +469,18 @@ export default function Calendar({ posts, onUpdatePost, onDeletePost, onEditPost
 
   const handleReschedule = (postId: string, newDateTime: string) => {
     if (onUpdatePost) {
+      const post = posts.find(p => p.id === postId);
       onUpdatePost(postId, {
         datetime: new Date(newDateTime).toISOString()
       });
+      
+      // Log activity
+      if (post) {
+        logPostAction('post_updated', {
+          ...post,
+          datetime: new Date(newDateTime).toISOString()
+        }, 'success').catch(console.error);
+      }
     }
   };
 
