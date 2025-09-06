@@ -1017,8 +1017,6 @@ export default function EnhancedComposeModal({
   };
 
   const handleImageTool = (e?: React.MouseEvent) => {
-    console.log('🖼️ Preview image tool clicked - THIS SHOULD NOT HAPPEN WHEN CLICKING PREVIEW IMAGES');
-    
     // Stop event propagation to prevent interference with ImageUpload
     if (e) {
       e.stopPropagation();
@@ -1028,19 +1026,16 @@ export default function EnhancedComposeModal({
     // Check if real upload area is being clicked to avoid conflicts
     const target = e?.target as HTMLElement;
     if (target && target.closest('[data-upload-area="real-upload"]')) {
-      console.log('🚫 Real upload area clicked, ignoring preview tool');
       return;
     }
     
     // Check if preview image area is being clicked
     if (target && (target.closest('[data-preview-image-grid]') || target.closest('[data-preview-image]'))) {
-      console.log('🚫 Preview image area clicked, ignoring tool');
       return;
     }
     
     // Prevent multiple dialogs by checking if already processing
     if (activeTools.has('image')) {
-      console.log('🔒 Image tool already active, preventing duplicate dialog');
       return;
     }
     
@@ -1094,8 +1089,6 @@ export default function EnhancedComposeModal({
             message: `${newPreviewUrls.length} ảnh đã được thêm vào preview mockup`,
             duration: 2000
           });
-          
-          console.log('🖼️ Preview images updated:', newPreviewUrls.length, 'images');
         } catch (error) {
           console.error('Error processing preview images:', error);
           showToast({
@@ -1143,7 +1136,6 @@ export default function EnhancedComposeModal({
     try {
       // Try immediate click first
       fileInput.click();
-      console.log('✅ File dialog opened successfully');
     } catch (error) {
       console.error('❌ Error opening file dialog:', error);
       
@@ -1151,7 +1143,6 @@ export default function EnhancedComposeModal({
       setTimeout(() => {
         try {
           fileInput.click();
-          console.log('✅ Alternative file dialog opened');
         } catch (retryError) {
           console.error('❌ Alternative approach failed:', retryError);
           cleanup();
@@ -1347,19 +1338,8 @@ export default function EnhancedComposeModal({
   if (!isOpen) return null;
 
   return (
-    <div 
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-      onClick={(e) => {
-        console.log('🔍 Modal backdrop clicked:', e.target);
-      }}
-    >
-      <div 
-        className="w-full max-w-7xl max-h-[95vh] rounded-2xl bg-white shadow-xl ring-1 ring-black/5 overflow-hidden"
-        onClick={(e) => {
-          console.log('🔍 Modal content clicked:', e.target, e.currentTarget);
-          // Check if this triggers any unwanted behavior
-        }}
-      >
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="w-full max-w-7xl max-h-[95vh] rounded-2xl bg-white shadow-xl ring-1 ring-black/5 overflow-hidden">
         <div className="max-h-[95vh] overflow-y-auto">
           {/* Header */}
           <div className="flex items-center justify-between border-b p-4">
@@ -1746,8 +1726,6 @@ export default function EnhancedComposeModal({
                                   e.preventDefault();
                                   // Stop other listeners on same element
                                   (e.nativeEvent as any).stopImmediatePropagation?.();
-                                  
-                                  console.log('🖼️ Preview image clicked - should NOT trigger file dialog');
                                   
                                   if (isSelected) {
                                     // Remove from preview

@@ -37,23 +37,10 @@ export default function ImageUpload({
   // Update images when initialImages changes (for editing mode)
   useEffect(() => {
     if (initialImages.length > 0 && images.length === 0) {
-      console.log('📤 Setting initial images:', initialImages.length);
       setImages(initialImages);
       onImagesChange?.(initialImages);
     }
   }, [initialImages, images.length, onImagesChange]);
-  
-  // Debug: Check file input ref on mount
-  useEffect(() => {
-    console.log('📤 ImageUpload mounted, inputId:', inputId);
-    console.log('📤 fileInputRef on mount:', fileInputRef.current);
-    
-    const timer = setTimeout(() => {
-      console.log('📤 fileInputRef after timeout:', fileInputRef.current);
-    }, 100);
-    
-    return () => clearTimeout(timer);
-  }, [inputId]);
 
   // Handle file selection or drop
   const handleFiles = async (files: FileList | File[]) => {
@@ -63,11 +50,8 @@ export default function ImageUpload({
     const filesToProcess = fileArray.slice(0, remainingSlots);
 
     if (filesToProcess.length === 0) {
-      console.log('📤 No slots available for new images');
       return;
     }
-
-    console.log('📤 Adding new images to existing list. Current:', images.length, 'New:', filesToProcess.length);
 
     // Add files to existing images (append, don't replace)
     const newImages: UploadedImage[] = filesToProcess.map(file => ({
@@ -106,7 +90,6 @@ export default function ImageUpload({
             onImagesChange?.(updated);
             return updated;
           });
-          console.log('✅ Image uploaded successfully:', result.publicUrl);
         } else {
           // Update with error by ID
           setImages(prev => {
@@ -122,7 +105,6 @@ export default function ImageUpload({
             onImagesChange?.(updated);
             return updated;
           });
-          console.error('❌ Image upload failed:', result.error);
         }
       } catch (error) {
         // Handle unexpected errors by ID
@@ -148,7 +130,6 @@ export default function ImageUpload({
   const handleDrag = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    console.log('🎯 ImageUpload drag event:', e.type);
     
     if (e.type === 'dragenter' || e.type === 'dragover') {
       setDragActive(true);
@@ -169,9 +150,7 @@ export default function ImageUpload({
 
   // Handle file input change
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    console.log('📤 ImageUpload file input changed');
     if (e.target.files && e.target.files.length > 0) {
-      console.log('📤 Files selected:', e.target.files.length);
       handleFiles(e.target.files);
     }
   };
@@ -232,9 +211,6 @@ export default function ImageUpload({
             accept="image/png,image/jpeg,image/jpg,image/webp"
             multiple
             onChange={handleInputChange}
-            onClick={(e) => {
-              console.log('📤 File input directly clicked!', e.type);
-            }}
             onDragEnter={handleDrag}
             onDragLeave={handleDrag}
             onDragOver={handleDrag}
