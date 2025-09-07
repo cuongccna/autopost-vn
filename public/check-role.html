@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kiểm tra User Role</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            max-width: 600px;
+            margin: 40px auto;
+            padding: 20px;
+            background: #f5f7fa;
+        }
+        .container {
+            background: white;
+            border-radius: 12px;
+            padding: 32px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 32px;
+        }
+        .btn {
+            background: #3b82f6;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            margin: 8px;
+        }
+        .btn:hover {
+            background: #2563eb;
+        }
+        .result {
+            background: #f0f9ff;
+            border: 1px solid #0ea5e9;
+            border-radius: 8px;
+            padding: 16px;
+            margin-top: 16px;
+            white-space: pre-wrap;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 14px;
+        }
+        .success {
+            background: #f0fdf4;
+            border: 1px solid #22c55e;
+            color: #16a34a;
+        }
+        .error {
+            background: #fef2f2;
+            border: 1px solid #ef4444;
+            color: #dc2626;
+        }
+        .status {
+            padding: 8px 16px;
+            border-radius: 6px;
+            margin: 8px 0;
+            font-weight: bold;
+        }
+        .status.professional {
+            background: #dbeafe;
+            color: #1e40af;
+            border: 1px solid #3b82f6;
+        }
+        .status.free {
+            background: #f3f4f6;
+            color: #374151;
+            border: 1px solid #6b7280;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔍 Kiểm tra User Role</h1>
+            <p>Kiểm tra xem user role đã được cập nhật thành Professional chưa</p>
+        </div>
+
+        <div style="text-align: center;">
+            <button class="btn" onclick="checkSession()">Kiểm tra Session</button>
+            <button class="btn" onclick="checkCurrentUser()">Kiểm tra User Info</button>
+            <button class="btn" onclick="window.open('http://localhost:3000/auth/signin', '_blank')">Mở trang đăng nhập</button>
+        </div>
+
+        <div id="result"></div>
+        <div id="userStatus"></div>
+    </div>
+
+    <script>
+        async function checkSession() {
+            const resultDiv = document.getElementById('result');
+            const statusDiv = document.getElementById('userStatus');
+            
+            resultDiv.innerHTML = 'Đang kiểm tra session...';
+            statusDiv.innerHTML = '';
+            
+            try {
+                const response = await fetch('/api/debug/session');
+                const data = await response.json();
+                
+                if (response.ok) {
+                    const role = data.session?.user?.role || 'free';
+                    const email = data.session?.user?.email || 'N/A';
+                    const name = data.session?.user?.name || 'N/A';
+                    
+                    resultDiv.className = 'result success';
+                    resultDiv.innerHTML = `✅ Session tìm thấy!
+
+📧 Email: ${email}
+👤 Tên: ${name}
+🎯 Role: ${role}
+
+🔧 Debug info:
+- Has role: ${data.debug.hasRole}
+- Role value: ${data.debug.roleValue}
+
+📊 Full session:
+${JSON.stringify(data.session, null, 2)}`;
+
+                    // Show user status
+                    statusDiv.innerHTML = `
+                        <div class="status ${role}">
+                            ${role === 'professional' ? '👑 Professional User' : '🆓 Free User'}
+                        </div>
+                    `;
+                    
+                    if (role === 'professional') {
+                        statusDiv.innerHTML += '<p style="color: green;">✅ Role đã được cập nhật thành công!</p>';
+                    } else {
+                        statusDiv.innerHTML += '<p style="color: orange;">⚠️ Role vẫn đang là free. Có thể cần đăng xuất và đăng nhập lại.</p>';
+                    }
+                    
+                } else {
+                    resultDiv.className = 'result error';
+                    resultDiv.innerHTML = `❌ ${data.error}
+
+Chi tiết: ${data.details || 'N/A'}
+
+💡 Có thể bạn chưa đăng nhập. Hãy:
+1. Mở trình duyệt thông thường
+2. Vào http://localhost:3000/auth/signin
+3. Đăng nhập với email: qiangvinhhoan@gmail.com
+4. Quay lại đây và kiểm tra lại`;
+                }
+            } catch (error) {
+                resultDiv.className = 'result error';
+                resultDiv.innerHTML = `❌ Lỗi kết nối: ${error.message}
+
+💡 Đảm bảo:
+- Dev server đang chạy (npm run dev)
+- Bạn đã đăng nhập trong trình duyệt`;
+            }
+        }
+
+        async function checkCurrentUser() {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = 'Đang kiểm tra thông tin user...';
+            
+            try {
+                const response = await fetch('/api/user/profile');
+                const data = await response.json();
+                
+                if (response.ok) {
+                    resultDiv.className = 'result success';
+                    resultDiv.innerHTML = `✅ User Profile API:
+
+${JSON.stringify(data, null, 2)}`;
+                } else {
+                    resultDiv.className = 'result error';
+                    resultDiv.innerHTML = `❌ Lỗi API: ${data.error}`;
+                }
+            } catch (error) {
+                resultDiv.className = 'result error';
+                resultDiv.innerHTML = `❌ Lỗi: ${error.message}`;
+            }
+        }
+
+        // Auto check on load
+        window.onload = function() {
+            setTimeout(checkSession, 1000);
+        };
+    </script>
+</body>
+</html>

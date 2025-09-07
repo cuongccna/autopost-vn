@@ -53,15 +53,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'User ID not found' }, { status: 401 });
     }
 
-    // Get user's actual role from database
-    const supabaseAdmin = sbServer(true); // Use service role
-    const { data: userData, error: userError } = await supabaseAdmin
-      .from('users')
-      .select('role')
-      .eq('id', userId)
-      .single();
-
-    const userRole = userData?.role || 'free';
+    // Get user's role from session (already loaded from auth.users)
+    const userRole = (session.user as any).role || 'free';
     console.log(`User ${userId} has role: ${userRole}`);
 
     // Check post rate limit before processing
@@ -187,6 +180,14 @@ export async function POST(request: NextRequest) {
         { error: 'Failed to create post' },
         { status: 500 }
       )
+    }
+
+    // Tạo post schedules nếu là scheduled post
+    if (scheduled_at && providers && providers.length > 0) {
+      console.log(`🔄 [POST] Creating schedules for post ${post.id}, providers:`, providers);
+      await createPostSchedules(post.id, workspace.id, providers, scheduled_at);
+    } else {
+      console.log(`⚠️ [POST] No schedules created - scheduled_at: ${scheduled_at}, providers:`, providers);
     }
 
     // Log post usage after successful creation
@@ -364,5 +365,65 @@ export async function DELETE(request: NextRequest) {
       { error: 'Internal server error' },
       { status: 500 }
     )
+  }
+}
+
+/**
+ * Tạo post schedules cho bài đăng được lên lịch
+ */
+async function createPostSchedules(
+  postId: string, 
+  workspaceId: string, 
+  providers: string[], 
+  scheduledAt: string
+) {
+  try {
+    console.log(`🔍 [SCHEDULES] Input - postId: ${postId}, workspaceId: ${workspaceId}, providers:`, providers, 'scheduledAt:', scheduledAt);
+    
+    const supabase = sbServer();
+    
+    // Lấy social accounts theo providers
+    const { data: socialAccounts, error: accountsError } = await supabase
+      .from('autopostvn_social_accounts')
+      .select('id, provider')
+      .eq('workspace_id', workspaceId)
+      .eq('status', 'connected')
+      .in('provider', providers);
+
+    console.log(`🔍 [SCHEDULES] Query result - accounts:`, socialAccounts, 'error:', accountsError);
+
+    if (accountsError) {
+      console.error('❌ Error fetching social accounts:', accountsError);
+      return;
+    }
+
+    if (!socialAccounts || socialAccounts.length === 0) {
+      console.warn('⚠️ No connected social accounts found for providers:', providers);
+      return;
+    }
+
+    // Tạo schedule cho mỗi social account
+    const schedules = socialAccounts.map(account => ({
+      post_id: postId,
+      social_account_id: account.id,
+      scheduled_at: scheduledAt,
+      status: 'pending',
+      retry_count: 0
+    }));
+
+    console.log(`🔍 [SCHEDULES] Creating schedules:`, schedules);
+
+    const { error: schedulesError } = await supabase
+      .from('autopostvn_post_schedules')
+      .insert(schedules);
+
+    if (schedulesError) {
+      console.error('❌ Error creating post schedules:', schedulesError);
+    } else {
+      console.log(`✅ Created ${schedules.length} post schedules for post ${postId}`);
+    }
+
+  } catch (error) {
+    console.error('❌ Error in createPostSchedules:', error);
   }
 }

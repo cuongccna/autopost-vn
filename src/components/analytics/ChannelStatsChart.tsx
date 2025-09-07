@@ -17,8 +17,8 @@ interface ChannelStatsChartProps {
 export default function ChannelStatsChart({ posts }: ChannelStatsChartProps) {
   const channelStats = useMemo(() => {
     const stats = {
-      fb: { total: 0, success: 0, failed: 0 },
-      ig: { total: 0, success: 0, failed: 0 },
+      facebook: { total: 0, success: 0, failed: 0 },
+      instagram: { total: 0, success: 0, failed: 0 },
       zalo: { total: 0, success: 0, failed: 0 }
     };
 
@@ -35,7 +35,7 @@ export default function ChannelStatsChart({ posts }: ChannelStatsChartProps) {
 
     return Object.entries(stats).map(([key, data]) => ({
       provider: key,
-      name: key === 'fb' ? 'Facebook' : key === 'ig' ? 'Instagram' : 'Zalo',
+      name: key === 'facebook' ? 'Facebook' : key === 'instagram' ? 'Instagram' : 'Zalo',
       total: data.total,
       success: data.success,
       failed: data.failed,

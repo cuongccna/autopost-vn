@@ -41,7 +41,7 @@ const initialPosts: Post[] = [
     id: '1', 
     title: 'Khai trương deal 9.9 — Free ship', 
     datetime: new Date().toISOString(), 
-    providers: ['fb','ig'], 
+    providers: ['facebook','instagram'], 
     status: 'scheduled',
     content: 'Chào mừng khai trương cửa hàng! Deal khủng 9.9 với free ship toàn quốc. Đừng bỏ lỡ cơ hội này!',
     mediaUrls: [
@@ -61,7 +61,7 @@ const initialPosts: Post[] = [
     id: '3', 
     title: 'Ảnh sản phẩm mới (teaser)', 
     datetime: new Date(Date.now()+1000*60*60*28).toISOString(), 
-    providers: ['fb','ig','zalo'], 
+    providers: ['facebook','instagram','zalo'], 
     status: 'scheduled',
     content: 'Sneak peek sản phẩm mới sắp ra mắt! Ai đoán được là gì không? 👀',
     mediaUrls: [
@@ -72,7 +72,7 @@ const initialPosts: Post[] = [
     id: '4', 
     title: 'Review khách hàng tháng 9', 
     datetime: new Date(Date.now()-1000*60*60*24).toISOString(), 
-    providers: ['fb','ig'], 
+    providers: ['facebook','instagram'], 
     status: 'published',
     content: 'Cảm ơn những feedback tuyệt vời từ khách hàng trong tháng 9!'
   },
@@ -80,7 +80,7 @@ const initialPosts: Post[] = [
     id: '5', 
     title: 'Livestream bán hàng', 
     datetime: new Date(Date.now()-1000*60*60*2).toISOString(), 
-    providers: ['fb'], 
+    providers: ['facebook'], 
     status: 'failed',
     content: 'Livestream bán hàng lúc 20h tối nay, nhiều ưu đãi hấp dẫn!',
     error: 'API rate limit exceeded - too many requests'
@@ -91,7 +91,7 @@ const initialAccounts = [
   { 
     id: '1',
     name: 'Fanpage Cửa Hàng A', 
-    provider: 'fb', 
+    provider: 'facebook', 
     status: 'Đã kết nối',
     pageId: 'fb_page_123',
     tokenExpiry: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() // 30 days from now
@@ -99,7 +99,7 @@ const initialAccounts = [
   { 
     id: '2',
     name: 'IG @shop.a', 
-    provider: 'ig', 
+    provider: 'instagram', 
     status: 'Đã kết nối',
     pageId: 'ig_biz_456',
     tokenExpiry: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString() // 5 days from now
@@ -153,7 +153,7 @@ function AppPageContent() {
   const [isAddAccountOpen, setIsAddAccountOpen] = useState(false);
   const [isFullActivityLogsOpen, setIsFullActivityLogsOpen] = useState(false);
   const [posts, setPosts] = useState<Post[]>([]);
-  const [accounts, setAccounts] = useState(initialAccounts);
+  const [accounts, setAccounts] = useState<any[]>([]); // Start with empty array, load from API
   const [logs, setLogs] = useState(initialLogs);
   const [settings, setSettings] = useState(initialSettings);
   const [selectedDateForCompose, setSelectedDateForCompose] = useState<Date | null>(null);
@@ -226,11 +226,13 @@ function AppPageContent() {
         tokenExpiry: account.token_expires_at,
       })) || [];
       
-      setAccounts([...initialAccounts, ...formattedAccounts]);
+      // Use only API data, not mock data
+      setAccounts(formattedAccounts);
       
     } catch (error) {
       console.error('Error fetching accounts:', error);
-      // Keep using initial accounts if API fails
+      // Set empty array if API fails
+      setAccounts([]);
     }
   };
 
@@ -238,11 +240,18 @@ function AppPageContent() {
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const oauthSuccess = urlParams.get('oauth_success');
-    const accountName = urlParams.get('account');
+    const accountsCount = urlParams.get('accounts_saved') || urlParams.get('accounts'); // Support both parameter names
     const oauthError = urlParams.get('oauth_error');
 
-    if (oauthSuccess && accountName) {
-      toast.success(`Kết nối ${oauthSuccess} thành công: ${decodeURIComponent(accountName)}`);
+    if (oauthSuccess) {
+      const provider = oauthSuccess;
+      const count = accountsCount ? parseInt(accountsCount) : 0;
+      
+      if (count > 0) {
+        toast.success(`Kết nối ${provider} thành công! Tìm thấy ${count} tài khoản.`);
+      } else {
+        toast.warning(`Kết nối ${provider} thành công nhưng không tìm thấy tài khoản nào.`);
+      }
       
       // Refresh accounts data
       fetchAccounts();
@@ -253,8 +262,45 @@ function AppPageContent() {
 
     if (oauthError) {
       console.error('❌ OAuth Error detected:', oauthError);
-      const details = urlParams.get('details');
-      toast.error(`Lỗi kết nối OAuth: ${oauthError}${details ? ` - ${details}` : ''}`);
+      
+      // Handle special Instagram error with detailed instructions
+      if (oauthError.includes('no_instagram_business_account')) {
+        const hasPages = urlParams.get('pages_found');
+        const noPages = urlParams.get('no_pages');
+        
+        let detailedMessage = '';
+        if (noPages) {
+          detailedMessage = 'Tài khoản Facebook của bạn chưa có Facebook Page nào. Vui lòng tạo Facebook Page trước khi kết nối Instagram.';
+        } else if (hasPages) {
+          detailedMessage = `Tìm thấy ${hasPages} Facebook Page nhưng không có Instagram Business Account nào được kết nối. Vui lòng:\n\n1. Chuyển Instagram sang Business Account\n2. Kết nối Instagram với Facebook Page\n3. Thử lại`;
+        } else {
+          detailedMessage = 'Tài khoản Facebook chưa có Instagram Business Account. Vui lòng chuyển đổi Instagram sang Business Account và kết nối với Facebook Page.';
+        }
+        
+        toast.error(detailedMessage, {
+          duration: 8000,
+          style: {
+            maxWidth: '500px',
+            whiteSpace: 'pre-line'
+          }
+        });
+      } else {
+        const errorMessages: Record<string, string> = {
+          'invalid_state': 'Phiên kết nối không hợp lệ. Vui lòng thử lại.',
+          'state_expired': 'Phiên kết nối đã hết hạn. Vui lòng thử lại.',
+          'no_code': 'Không nhận được mã xác thực từ nhà cung cấp.',
+          'token_exchange_failed': 'Lỗi trao đổi token. Vui lòng thử lại.',
+          'fetch_pages_failed': 'Không thể lấy danh sách trang/tài khoản.',
+          'server_error': 'Lỗi server. Vui lòng thử lại sau.',
+          'access_denied': 'Bạn đã từ chối cấp quyền truy cập.',
+          'profile_fetch_failed': 'Không thể lấy thông tin profile. Vui lòng thử lại.',
+          'pages_fetch_failed': 'Không thể lấy danh sách pages. Vui lòng thử lại.',
+          'database_error': 'Lỗi lưu dữ liệu. Vui lòng thử lại.'
+        };
+        
+        const errorMessage = errorMessages[oauthError] || `Lỗi kết nối: ${oauthError}`;
+        toast.error(errorMessage);
+      }
       
       // Clean URL
       window.history.replaceState({}, '', '/app');
@@ -343,6 +389,10 @@ function AppPageContent() {
   ];
 
   const connectedProviders = accounts.map(acc => acc.provider);
+
+  // Debug log
+  console.log('📊 App - accounts:', accounts);
+  console.log('🔗 App - connectedProviders:', connectedProviders);
 
   const handleTabChange = (tab: string) => {
     setCurrentTab(tab);
@@ -638,62 +688,92 @@ function AppPageContent() {
     }
   };
 
-  const handleDisconnectAccount = (accountId: string) => {
-    const account = accounts.find(acc => acc.id === accountId);
-    if (account) {
-      setAccounts(prev => prev.filter(acc => acc.id !== accountId));
+  const handleDisconnectAccount = async (accountId: string) => {
+    try {
+      const account = accounts.find(acc => acc.id === accountId);
+      if (!account) {
+        toast.error('Không tìm thấy tài khoản để hủy kết nối.');
+        return;
+      }
+
+      // Show loading toast
+      toast.info(`Đang hủy kết nối ${account.name}...`);
+
+      // Call disconnect API
+      const response = await fetch(`/api/user/accounts?id=${accountId}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
       
-      // Log account disconnection
-      logAccountAction('account_disconnected', account, 'success').catch(console.error);
-      
-      // Refresh activity logs after successful action
-      setTimeout(() => {
-        refreshActivityLogs();
-      }, 500);
-      
-      const now = new Date();
-      const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      setLogs(prev => [`⚠️ ${timeStr} — Ngắt kết nối ${account.name}`, ...prev]);
-      toast.warning(`Đã ngắt kết nối ${account.name}`);
+      if (result.success) {
+        // Remove from UI
+        setAccounts(prev => prev.filter(acc => acc.id !== accountId));
+        
+        // Log account disconnection
+        logAccountAction('account_disconnected', account, 'success').catch(console.error);
+        
+        // Refresh activity logs after successful action
+        setTimeout(() => {
+          refreshActivityLogs();
+        }, 500);
+        
+        const now = new Date();
+        const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        setLogs(prev => [`⚠️ ${timeStr} — Ngắt kết nối ${account.name}`, ...prev]);
+        toast.success(`Đã hủy kết nối ${account.name} thành công!`);
+      } else {
+        throw new Error(result.error || 'Unknown error');
+      }
+    } catch (error) {
+      console.error('Disconnect failed:', error);
+      toast.error('Lỗi khi hủy kết nối tài khoản. Vui lòng thử lại.');
     }
   };
 
-  const handleConnectAccount = (provider: string) => {
+  const handleConnectAccount = async (provider: string) => {
     // Check if provider already connected
     if (accounts.some(acc => acc.provider === provider)) {
       toast.warning(`${PROVIDERS[provider as keyof typeof PROVIDERS]?.label} đã được kết nối rồi!`);
       return;
     }
 
-    const providerNames = {
-      fb: 'Fanpage Mới',
-      ig: 'IG @shop.new', 
-      zalo: 'Zalo OA /new'
-    };
-    
-    const newAccount = {
-      id: Math.random().toString(36).slice(2),
-      name: providerNames[provider as keyof typeof providerNames] || 'New Account',
-      provider,
-      status: 'Đã kết nối',
-      pageId: `${provider}_${Math.random().toString(36).slice(2)}`,
-      tokenExpiry: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString()
-    };
+    try {
+      // Redirect to OAuth endpoint instead of creating fake accounts
+      const baseUrl = window.location.origin;
+      const oauthUrl = `${baseUrl}/api/auth/oauth/${provider}`;
+      
+      // Close modal first
+      setIsAddAccountOpen(false);
+      
+      // Show loading toast
+      toast.info(`Đang chuyển hướng đến ${PROVIDERS[provider as keyof typeof PROVIDERS]?.label || provider}...`);
+      
+      // Redirect to OAuth
+      window.location.href = oauthUrl;
+    } catch (error) {
+      console.error('OAuth redirect failed:', error);
+      toast.error('Lỗi khi kết nối tài khoản. Vui lòng thử lại.');
+    }
+  };
 
-    setAccounts(prev => [...prev, newAccount]);
+  const handleDisconnectAccountByProvider = async (provider: string) => {
+    // Find the account to disconnect
+    const accountToDisconnect = accounts.find(acc => acc.provider === provider);
+    if (!accountToDisconnect) {
+      toast.error('Không tìm thấy tài khoản để hủy kết nối.');
+      return;
+    }
+
+    // Call the existing disconnect function with account ID
+    await handleDisconnectAccount(accountToDisconnect.id);
     
-    // Log account connection
-    logAccountAction('account_connected', newAccount, 'success').catch(console.error);
-    
-    // Refresh activity logs after successful action
-    setTimeout(() => {
-      refreshActivityLogs();
-    }, 500);
-    
-    const now = new Date();
-    const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    setLogs(prev => [`✔️ ${timeStr} — Kết nối ${newAccount.name} thành công`, ...prev]);
-    toast.success(`Kết nối ${newAccount.name} thành công!`);
+    // Close modal after successful disconnect
+    setIsAddAccountOpen(false);
   };
 
   const handleSaveSettings = async (newSettings: typeof settings) => {
@@ -869,6 +949,7 @@ function AppPageContent() {
         isOpen={isAddAccountOpen}
         onClose={() => setIsAddAccountOpen(false)}
         onConnect={handleConnectAccount}
+        onDisconnect={handleDisconnectAccountByProvider}
         connectedProviders={connectedProviders}
       />
       

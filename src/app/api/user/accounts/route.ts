@@ -10,9 +10,13 @@ export async function GET(_request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    console.log('🔍 Fetching accounts for user:', session.user.email);
+
     const accounts = await userManagementService.getUserSocialAccounts(
       session.user.email
     );
+
+    console.log('📦 Found accounts:', accounts.length, accounts);
 
     return NextResponse.json({ 
       success: true,

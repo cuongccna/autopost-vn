@@ -1,11 +1,11 @@
 export const PROVIDERS = {
-  fb: { 
+  facebook: { 
     label: 'Facebook Page', 
     tag: 'FB', 
     chip: 'bg-blue-100 text-blue-700',
     apiKey: 'facebook'
   },
-  ig: { 
+  instagram: { 
     label: 'Instagram Biz', 
     tag: 'IG', 
     chip: 'bg-pink-100 text-pink-700',
@@ -21,7 +21,7 @@ export const PROVIDERS = {
 
 export type ProviderKey = keyof typeof PROVIDERS;
 
-// Helper function to convert UI provider keys to API keys
+// Helper function to convert UI provider keys to API keys (now unified)
 export const mapProvidersToAPI = (providers: string[]): string[] => {
   return providers.map(provider => {
     const providerConfig = PROVIDERS[provider as ProviderKey];

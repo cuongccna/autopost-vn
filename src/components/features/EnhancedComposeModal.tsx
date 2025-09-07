@@ -301,7 +301,7 @@ export default function EnhancedComposeModal({
   
   // Common states
   const [scheduleAt, setScheduleAt] = useState('');
-  const [selectedChannels, setSelectedChannels] = useState<Set<string>>(new Set(['fb', 'ig']));
+  const [selectedChannels, setSelectedChannels] = useState<Set<string>>(new Set(['facebook', 'instagram']));
   const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([]);
   const [initialEditImages, setInitialEditImages] = useState<UploadedImage[]>([]); // Store initial images for edit mode
   const [previewImages, setPreviewImages] = useState<string[]>([]); // For design preview
@@ -460,10 +460,10 @@ export default function EnhancedComposeModal({
         duration: 3000
       });
       
-      // Map UI channels to API platforms
+      // Map UI channels to API platforms (now unified)
       const platformMapping: { [key: string]: string } = {
-        'fb': 'facebook',
-        'ig': 'instagram',
+        'facebook': 'facebook',
+        'instagram': 'instagram',
         'zalo': 'zalo',
         'tiktok': 'tiktok'
       };
@@ -640,10 +640,10 @@ export default function EnhancedComposeModal({
       setTitle(editingPost.title || '');
       setPrimaryText(editingPost.content || '');
       
-      // Convert providers from API format to UI format
+      // Convert providers from API format to UI format (now unified - no conversion needed)
       const providerMapping: { [key: string]: string } = {
-        'facebook': 'fb',
-        'instagram': 'ig',
+        'facebook': 'facebook',
+        'instagram': 'instagram',
         'zalo': 'zalo'
       };
       
@@ -1371,7 +1371,7 @@ export default function EnhancedComposeModal({
     setTextEditMode(false);
     setShowLayerPanel(false);
     setScheduleAt('');
-    setSelectedChannels(new Set(['fb', 'ig']));
+    setSelectedChannels(new Set(['facebook', 'instagram']));
     setBrandColor('#0ea5e9');
     setRatio('1:1');
     setPlatform('Facebook Page');

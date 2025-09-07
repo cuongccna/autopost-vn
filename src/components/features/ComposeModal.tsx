@@ -48,7 +48,7 @@ export default function ComposeModal({ isOpen, onClose, onSubmit, goldenHours: c
   const { data: session } = useSession();
   const [content, setContent] = useState('');
   const [scheduleAt, setScheduleAt] = useState('');
-  const [selectedChannels, setSelectedChannels] = useState<Set<string>>(new Set(['fb', 'ig']));
+  const [selectedChannels, setSelectedChannels] = useState<Set<string>>(new Set(['facebook', 'instagram']));
   const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([]);
   const [showTemplateLibrary, setShowTemplateLibrary] = useState(false);
   
@@ -74,10 +74,10 @@ export default function ComposeModal({ isOpen, onClose, onSubmit, goldenHours: c
     if (editingPost) {
       setContent(editingPost.content || '');
       
-      // Convert providers from API format to UI format
+      // Convert providers from API format to UI format (now unified)
       const providerMapping: { [key: string]: string } = {
-        'facebook': 'fb',
-        'instagram': 'ig',
+        'facebook': 'facebook',
+        'instagram': 'instagram',
         'zalo': 'zalo'
       };
       
@@ -146,7 +146,7 @@ export default function ComposeModal({ isOpen, onClose, onSubmit, goldenHours: c
     // Reset form
     setContent('');
     setScheduleAt('');
-    setSelectedChannels(new Set(['fb', 'ig']));
+    setSelectedChannels(new Set(['facebook', 'instagram']));
     setUploadedImages([]);
     onClose();
   };

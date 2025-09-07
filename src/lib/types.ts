@@ -1,4 +1,4 @@
-export type ProviderKey = 'fb' | 'ig' | 'zalo';
+export type ProviderKey = 'facebook' | 'instagram' | 'zalo';
 
 export interface Post {
   id: string;

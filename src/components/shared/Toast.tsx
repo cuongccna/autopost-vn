@@ -6,6 +6,8 @@ interface Toast {
   id: string;
   message: string;
   type: 'success' | 'error' | 'info' | 'warning';
+  duration?: number;
+  style?: React.CSSProperties;
 }
 
 interface ToastContainerProps {
@@ -18,7 +20,7 @@ export function ToastContainer({ toasts, onRemoveToast }: ToastContainerProps) {
     toasts.forEach(toast => {
       const timer = setTimeout(() => {
         onRemoveToast(toast.id);
-      }, 5000);
+      }, toast.duration || 5000); // Use custom duration or default 5000ms
       return () => clearTimeout(timer);
     });
   }, [toasts, onRemoveToast]);
@@ -59,11 +61,17 @@ export function ToastContainer({ toasts, onRemoveToast }: ToastContainerProps) {
         <div
           key={toast.id}
           className={`rounded-xl border p-4 shadow-lg animate-in slide-in-from-right-full duration-300 ${getToastStyles(toast.type)}`}
+          style={toast.style}
         >
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <span>{getIcon(toast.type)}</span>
-              <span className="text-sm font-medium">{toast.message}</span>
+              <span 
+                className="text-sm font-medium"
+                style={{ whiteSpace: toast.style?.whiteSpace as any }}
+              >
+                {toast.message}
+              </span>
             </div>
             <button
               onClick={() => onRemoveToast(toast.id)}
@@ -81,9 +89,15 @@ export function ToastContainer({ toasts, onRemoveToast }: ToastContainerProps) {
 export function useToast() {
   const [toasts, setToasts] = useState<Toast[]>([]);
 
-  const addToast = (message: string, type: Toast['type'] = 'info') => {
+  const addToast = (message: string, type: Toast['type'] = 'info', options?: { duration?: number; style?: React.CSSProperties }) => {
     const id = Math.random().toString(36).slice(2);
-    setToasts(prev => [...prev, { id, message, type }]);
+    setToasts(prev => [...prev, { 
+      id, 
+      message, 
+      type,
+      duration: options?.duration,
+      style: options?.style
+    }]);
   };
 
   const removeToast = (id: string) => {
@@ -91,10 +105,10 @@ export function useToast() {
   };
 
   const toast = {
-    success: (message: string) => addToast(message, 'success'),
-    error: (message: string) => addToast(message, 'error'),
-    warning: (message: string) => addToast(message, 'warning'),
-    info: (message: string) => addToast(message, 'info'),
+    success: (message: string, options?: { duration?: number; style?: React.CSSProperties }) => addToast(message, 'success', options),
+    error: (message: string, options?: { duration?: number; style?: React.CSSProperties }) => addToast(message, 'error', options),
+    warning: (message: string, options?: { duration?: number; style?: React.CSSProperties }) => addToast(message, 'warning', options),
+    info: (message: string, options?: { duration?: number; style?: React.CSSProperties }) => addToast(message, 'info', options),
   };
 
   return {

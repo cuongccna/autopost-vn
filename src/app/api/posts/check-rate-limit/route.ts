@@ -14,15 +14,9 @@ export async function GET(request: NextRequest) {
 
     const userId = (session.user as any).id;
 
-    // Get user's actual role from database
-    const supabaseAdmin = sbServer(true); // Use service role
-    const { data: userData, error: userError } = await supabaseAdmin
-      .from('users')
-      .select('role')
-      .eq('id', userId)
-      .single();
-
-    const userRole = userData?.role || 'free';
+    // Get user's role from session (already loaded from auth.users)
+    const userRole = (session.user as any).role || 'free';
+    console.log(`Rate limit check for user ${userId} with role: ${userRole}`);
 
     // Check post rate limit
     const rateLimitCheck = await checkPostRateLimit(userId, userRole);

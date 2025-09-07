@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Auto-Posting System</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            max-width: 800px;
+            margin: 40px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            border-radius: 12px;
+            padding: 32px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 32px;
+        }
+        .header h1 {
+            color: #1f2937;
+            margin: 0 0 8px 0;
+            font-size: 28px;
+        }
+        .header p {
+            color: #6b7280;
+            margin: 0;
+        }
+        .step {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 24px;
+            margin-bottom: 24px;
+        }
+        .step h3 {
+            color: #1e40af;
+            margin: 0 0 16px 0;
+            font-size: 18px;
+        }
+        .btn {
+            background: #3b82f6;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            margin-right: 12px;
+            margin-bottom: 8px;
+        }
+        .btn:hover {
+            background: #2563eb;
+        }
+        .btn.success {
+            background: #10b981;
+        }
+        .btn.success:hover {
+            background: #059669;
+        }
+        .btn.warning {
+            background: #f59e0b;
+        }
+        .btn.warning:hover {
+            background: #d97706;
+        }
+        .result {
+            background: #f0f9ff;
+            border: 1px solid #0ea5e9;
+            border-radius: 8px;
+            padding: 16px;
+            margin-top: 16px;
+            white-space: pre-wrap;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 14px;
+        }
+        .error {
+            background: #fef2f2;
+            border: 1px solid #ef4444;
+            color: #dc2626;
+        }
+        .success {
+            background: #f0fdf4;
+            border: 1px solid #22c55e;
+            color: #16a34a;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚀 Test Auto-Posting System</h1>
+            <p>Hướng dẫn test hệ thống đăng bài tự động lên Facebook</p>
+        </div>
+
+        <div class="step">
+            <h3>Bước 1: Tạo dữ liệu test</h3>
+            <p>Tạo bài đăng test, tài khoản Facebook giả, và lịch đăng (5 phút sau)</p>
+            <button class="btn" onclick="createTestData()">Tạo dữ liệu test</button>
+            <div id="createResult"></div>
+        </div>
+
+        <div class="step">
+            <h3>Bước 2: Kiểm tra Scheduler Monitor</h3>
+            <p>Xem danh sách bài đăng đã lên lịch và test scheduler</p>
+            <button class="btn success" onclick="window.open('http://localhost:3000/settings', '_blank')">Mở Settings Page</button>
+        </div>
+
+        <div class="step">
+            <h3>Bước 3: Test Manual Scheduler</h3>
+            <p>Chạy scheduler thủ công để xem quá trình validation và publishing</p>
+            <button class="btn warning" onclick="testScheduler()">Test Scheduler</button>
+            <div id="schedulerResult"></div>
+        </div>
+
+        <div class="step">
+            <h3>Bước 4: Kiểm tra kết quả</h3>
+            <p>Xem activity logs và trạng thái bài đăng</p>
+            <button class="btn" onclick="checkStatus()">Kiểm tra trạng thái</button>
+            <button class="btn" onclick="window.open('http://localhost:3000/test/activity-logs', '_blank')">Xem Activity Logs</button>
+            <div id="statusResult"></div>
+        </div>
+    </div>
+
+    <script>
+        async function createTestData() {
+            const resultDiv = document.getElementById('createResult');
+            resultDiv.innerHTML = 'Đang tạo dữ liệu test...';
+            
+            try {
+                const response = await fetch('/api/test/create-test-data', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    resultDiv.className = 'result success';
+                    resultDiv.innerHTML = `✅ Tạo dữ liệu test thành công!
+
+📝 Thông tin:
+- Post ID: ${data.data.post_id}
+- Schedule ID: ${data.data.schedule_id}  
+- Social Account ID: ${data.data.social_account_id}
+- Thời gian lên lịch: ${new Date(data.data.scheduled_time).toLocaleString('vi-VN')}
+
+💡 Tiếp theo: Vào Settings page để test scheduler!`;
+                } else {
+                    resultDiv.className = 'result error';
+                    resultDiv.innerHTML = `❌ Lỗi: ${data.error}\\n\\nChi tiết: ${JSON.stringify(data.details, null, 2)}`;
+                }
+            } catch (error) {
+                resultDiv.className = 'result error';
+                resultDiv.innerHTML = `❌ Lỗi kết nối: ${error.message}`;
+            }
+        }
+
+        async function testScheduler() {
+            const resultDiv = document.getElementById('schedulerResult');
+            resultDiv.innerHTML = 'Đang chạy scheduler...';
+            
+            try {
+                const response = await fetch('/api/test/scheduler', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    resultDiv.className = 'result success';
+                    resultDiv.innerHTML = `✅ Scheduler đã chạy thành công!
+
+📊 Kết quả:
+- Đã xử lý: ${data.results.processed}
+- Thành công: ${data.results.success}  
+- Thất bại: ${data.results.failed}
+- Bỏ qua: ${data.results.skipped}
+
+📋 Chi tiết: ${JSON.stringify(data.results.details, null, 2)}`;
+                } else {
+                    resultDiv.className = 'result error';
+                    resultDiv.innerHTML = `❌ Lỗi: ${data.error}\\n\\nChi tiết: ${JSON.stringify(data.details, null, 2)}`;
+                }
+            } catch (error) {
+                resultDiv.className = 'result error';
+                resultDiv.innerHTML = `❌ Lỗi kết nối: ${error.message}`;
+            }
+        }
+
+        async function checkStatus() {
+            const resultDiv = document.getElementById('statusResult');
+            resultDiv.innerHTML = 'Đang kiểm tra trạng thái...';
+            
+            try {
+                const [schedulesRes, postsRes] = await Promise.all([
+                    fetch('/api/posts/schedules'),
+                    fetch('/api/posts')
+                ]);
+                
+                const schedulesData = await schedulesRes.json();
+                const postsData = await postsRes.json();
+                
+                resultDiv.className = 'result';
+                resultDiv.innerHTML = `📊 Trạng thái hiện tại:
+
+📅 Lịch đăng (${schedulesData.schedules?.length || 0}):
+${schedulesData.schedules?.map(s => `- ${s.platform}: ${s.status} (${new Date(s.scheduled_time).toLocaleString('vi-VN')})`).join('\\n') || 'Không có lịch nào'}
+
+📝 Bài đăng (${postsData.posts?.length || 0}):
+${postsData.posts?.map(p => `- ${p.content?.substring(0, 30)}...: ${p.status}`).join('\\n') || 'Không có bài nào'}`;
+                
+            } catch (error) {
+                resultDiv.className = 'result error';
+                resultDiv.innerHTML = `❌ Lỗi kết nối: ${error.message}`;
+            }
+        }
+    </script>
+</body>
+</html>

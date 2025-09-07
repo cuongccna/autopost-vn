@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import SchedulerMonitor from './SchedulerMonitor';
 
 interface SettingsData {
   notifySuccess: boolean;
@@ -48,13 +49,14 @@ export default function Settings({ settings, onSaveSettings, onResetSettings }: 
   };
 
   return (
-    <section className="rounded-2xl border bg-white p-4 shadow-sm">
-      <div className="mb-3 flex items-center justify-between">
-        <div className="text-base font-semibold">Cài đặt Workspace</div>
-        <span className="text-xs text-gray-500">Tác động đến lập lịch & thông báo</span>
-      </div>
-      
-      <form className="space-y-6" onSubmit={(e) => e.preventDefault()}>
+    <div className="space-y-6">
+      <section className="rounded-2xl border bg-white p-4 shadow-sm">
+        <div className="mb-3 flex items-center justify-between">
+          <div className="text-base font-semibold">Cài đặt Workspace</div>
+          <span className="text-xs text-gray-500">Tác động đến lập lịch & thông báo</span>
+        </div>
+        
+        <form className="space-y-6" onSubmit={(e) => e.preventDefault()}>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           {/* Notifications */}
           <div className="space-y-3">
@@ -200,5 +202,9 @@ export default function Settings({ settings, onSaveSettings, onResetSettings }: 
         </div>
       </form>
     </section>
+
+    {/* Scheduler Monitor */}
+    <SchedulerMonitor />
+    </div>
   );
 }

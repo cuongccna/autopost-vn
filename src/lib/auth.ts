@@ -73,7 +73,19 @@ export const authOptions: NextAuthOptions = {
     })
   ],
   session: {
-    strategy: "jwt"
+    strategy: "jwt",
+    maxAge: 24 * 60 * 60, // 24 hours
+  },
+  cookies: {
+    sessionToken: {
+      name: `next-auth.session-token`,
+      options: {
+        httpOnly: true,
+        sameSite: 'lax',
+        path: '/',
+        secure: process.env.NODE_ENV === 'production',
+      }
+    }
   },
   pages: {
     signIn: "/auth/signin",
@@ -91,12 +103,23 @@ export const authOptions: NextAuthOptions = {
     async jwt({ token, user }) {
       if (user) {
         token.id = user.id
+        // Get user's role from Supabase auth.users
+        try {
+          const { data: authUser } = await supabase.auth.admin.getUserById(user.id);
+          if (authUser.user) {
+            token.role = authUser.user.app_metadata?.role || 'free';
+          }
+        } catch (error) {
+          console.error('Error fetching user role:', error);
+          token.role = 'free';
+        }
       }
       return token
     },
     async session({ session, token }) {
       if (token && session.user) {
-        (session.user as any).id = token.id as string
+        (session.user as any).id = token.id as string;
+        (session.user as any).role = token.role as string;
       }
       return session
     }
