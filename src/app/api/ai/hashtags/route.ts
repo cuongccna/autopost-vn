@@ -14,12 +14,13 @@ export async function POST(request: NextRequest) {
     }
 
     userId = (session.user as any).id;
+    const userRole = (session.user as any).user_role || 'free';
     if (!userId) {
       return NextResponse.json({ error: 'User ID not found' }, { status: 401 });
     }
 
     // Check AI rate limit before processing
-    const rateLimitCheck = await checkAIRateLimit(userId, 'hashtags');
+    const rateLimitCheck = await checkAIRateLimit(userId, userRole);
     if (!rateLimitCheck.allowed) {
       return NextResponse.json(
         { 

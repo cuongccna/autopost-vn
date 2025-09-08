@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { sbServer } from '@/lib/supabase/server'
 import { checkPostRateLimit, logPostUsage } from '@/lib/services/postUsageService'
+import { userManagementService } from '@/lib/services/UserManagementService'
 
 // GET /api/posts - Fetch user's posts
 export async function GET(_request: NextRequest) {
@@ -54,7 +55,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Get user's role from session (already loaded from auth.users)
-    const userRole = (session.user as any).role || 'free';
+    const userRole = (session.user as any).user_role || 'free';
     console.log(`User ${userId} has role: ${userRole}`);
 
     // Check post rate limit before processing
@@ -73,6 +74,14 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json()
     const { title, content, providers, scheduled_at, media_urls } = body
+    
+    console.log('📝 [POST] Request body:', {
+      title,
+      content: content?.substring(0, 50) + '...',
+      providers,
+      scheduled_at,
+      media_urls_count: media_urls?.length || 0
+    });
 
     // Validation
     if (!title || !content) {
@@ -128,36 +137,9 @@ export async function POST(request: NextRequest) {
 
     const supabase = sbServer()
     
-    // Get or create default workspace for user
-    const userSlug = `user-${(session.user as any).id.replace(/-/g, '').substring(0, 8)}`
-
-    let { data: workspace, error: workspaceError } = await supabase
-      .from('autopostvn_workspaces')
-      .select('id')
-      .eq('slug', userSlug)
-      .single()
-
-    if (workspaceError || !workspace) {
-      // Create default workspace for user
-      const { data: newWorkspace, error: createWorkspaceError } = await supabase
-        .from('autopostvn_workspaces')
-        .insert({
-          name: 'Workspace của tôi',
-          slug: userSlug,
-          description: 'Workspace mặc định',
-        })
-        .select('id')
-        .single()
-
-      if (createWorkspaceError) {
-        console.error('❌ Failed to create workspace:', createWorkspaceError)
-        return NextResponse.json(
-          { error: 'Failed to create workspace', details: createWorkspaceError },
-          { status: 500 }
-        )
-      }
-      workspace = newWorkspace
-    }
+    // Get workspace using UserManagementService (same as dashboard and /api/user/accounts)
+    const workspace = await userManagementService.getOrCreateUserWorkspace(session.user.email!);
+    console.log('🏢 [POST] Using workspace:', workspace.id, workspace.workspace_name);
 
     const { data: post, error } = await supabase
       .from('autopostvn_posts')

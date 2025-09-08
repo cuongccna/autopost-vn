@@ -1,1 +1,4 @@
-export async function publishToInstagramBiz(){return{ok:true,external_post_id:'ig_demo'};}
+export async function publishToInstagramBiz(postData: any, accessToken: string) {
+  // TODO: Implement real Instagram Business API integration
+  throw new Error('Instagram publishing not implemented yet');
+}

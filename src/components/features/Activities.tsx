@@ -26,13 +26,13 @@ export default function Activities() {
   const getFilterConfig = () => {
     switch (activeFilter) {
       case 'recent':
-        return { limit: 50 };
+        return { limit: 20 };
       case 'errors':
-        return { status: 'failed' as const, limit: 100 };
+        return { status: 'failed' as const, limit: 20 };
       case 'success':
-        return { status: 'success' as const, limit: 50 };
+        return { status: 'success' as const, limit: 20 };
       default:
-        return {};
+        return { limit: 20 };
     }
   };
 
@@ -141,7 +141,7 @@ export default function Activities() {
       <div className="bg-white rounded-lg border">
         {activeFilter === 'all' ? (
           <div className="p-6">
-            <ActivityLogsView showFilters={true} limit={100} />
+            <ActivityLogsView showFilters={true} limit={20} />
           </div>
         ) : (
           <div className="p-6">

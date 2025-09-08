@@ -179,7 +179,7 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   return (
     <ToastContext.Provider value={{ showToast, hideToast, hideAllToasts }}>
       {children}
-      <div className="fixed top-0 right-0 z-50 p-4 space-y-2 pointer-events-none">
+      <div className="fixed top-20 right-4 z-50 space-y-2 pointer-events-none max-w-sm">
         {toasts.map((toast) => (
           <div key={toast.id} className="pointer-events-auto">
             <Toast {...toast} />

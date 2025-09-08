@@ -52,9 +52,9 @@ export async function checkAIRateLimit(
     if (!data.allowed) {
       if (userRole === 'free') {
         if (stats.dailyUsage >= stats.dailyLimit) {
-          message = `Bạn đã sử dụng hết ${stats.dailyLimit} lượt AI miễn phí trong ngày. Nâng cấp lên gói Professional để có ${20} lượt/ngày và nhiều tính năng khác!`;
+          message = `Bạn đã sử dụng hết ${stats.dailyLimit} lượt AI miễn phí trong ngày. Nâng cấp lên gói Professional để có 50 lượt/ngày và nhiều tính năng khác!`;
         } else if (stats.monthlyUsage >= stats.monthlyLimit) {
-          message = `Bạn đã sử dụng hết ${stats.monthlyLimit} lượt AI miễn phí trong tháng. Nâng cấp lên gói Professional để có ${600} lượt/tháng!`;
+          message = `Bạn đã sử dụng hết ${stats.monthlyLimit} lượt AI miễn phí trong tháng. Nâng cấp lên gói Professional để có 1000 lượt/tháng!`;
         }
       } else if (userRole === 'professional') {
         if (stats.dailyUsage >= stats.dailyLimit) {
@@ -180,8 +180,8 @@ export function getUpgradeMessage(userRole: string): string {
     case 'free':
       return `
 🚀 **Nâng cấp lên Professional** để được:
-• **20 lượt AI/ngày** (thay vì 2 lượt)
-• **600 lượt AI/tháng** (thay vì 60 lượt)
+• **50 lượt AI/ngày** (thay vì 0 lượt)
+• **1000 lượt AI/tháng** (thay vì 0 lượt)
 • Lên lịch không giới hạn bài đăng
 • Phân tích chi tiết engagement
 • Hỗ trợ ưu tiên 24/7

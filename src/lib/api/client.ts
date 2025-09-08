@@ -1,7 +1,13 @@
 // AutoPost VN - Frontend API Client
 // Client để kết nối frontend với backend API
 
-import { ApiResponse } from '@/lib/backend/types';
+// Define ApiResponse type locally since backend types are removed
+interface ApiResponse<T = any> {
+  success: boolean;
+  data?: T;
+  error?: string;
+  message?: string;
+}
 
 interface RequestOptions {
   method?: string;

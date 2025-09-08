@@ -21,7 +21,6 @@ import AddAccountModal from '@/components/features/AddAccountModal';
 import { ToastContainer, useToast } from '@/components/shared/Toast';
 import { useActivityLogger } from '@/hooks/useActivityLogger';
 import { PROVIDERS, mapProvidersToAPI } from '@/lib/constants';
-import { AIUsageIndicatorRef } from '@/components/shared/AIUsageIndicator';
 
 // Types
 interface Post {
@@ -34,100 +33,6 @@ interface Post {
   error?: string;
   mediaUrls?: string[];
 }
-
-// Mock data
-const initialPosts: Post[] = [
-  { 
-    id: '1', 
-    title: 'Khai trương deal 9.9 — Free ship', 
-    datetime: new Date().toISOString(), 
-    providers: ['facebook','instagram'], 
-    status: 'scheduled',
-    content: 'Chào mừng khai trương cửa hàng! Deal khủng 9.9 với free ship toàn quốc. Đừng bỏ lỡ cơ hội này!',
-    mediaUrls: [
-      'https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?w=400',
-      'https://images.unsplash.com/photo-1549298916-b41d501d3772?w=400'
-    ]
-  },
-  { 
-    id: '2', 
-    title: 'Tips chăm fan Zalo OA', 
-    datetime: new Date(Date.now()+1000*60*60*4).toISOString(), 
-    providers: ['zalo'], 
-    status: 'scheduled',
-    content: 'Cách tăng tương tác và chăm sóc khách hàng trên Zalo OA hiệu quả nhất'
-  },
-  { 
-    id: '3', 
-    title: 'Ảnh sản phẩm mới (teaser)', 
-    datetime: new Date(Date.now()+1000*60*60*28).toISOString(), 
-    providers: ['facebook','instagram','zalo'], 
-    status: 'scheduled',
-    content: 'Sneak peek sản phẩm mới sắp ra mắt! Ai đoán được là gì không? 👀',
-    mediaUrls: [
-      'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=400'
-    ]
-  },
-  { 
-    id: '4', 
-    title: 'Review khách hàng tháng 9', 
-    datetime: new Date(Date.now()-1000*60*60*24).toISOString(), 
-    providers: ['facebook','instagram'], 
-    status: 'published',
-    content: 'Cảm ơn những feedback tuyệt vời từ khách hàng trong tháng 9!'
-  },
-  { 
-    id: '5', 
-    title: 'Livestream bán hàng', 
-    datetime: new Date(Date.now()-1000*60*60*2).toISOString(), 
-    providers: ['facebook'], 
-    status: 'failed',
-    content: 'Livestream bán hàng lúc 20h tối nay, nhiều ưu đãi hấp dẫn!',
-    error: 'API rate limit exceeded - too many requests'
-  }
-];
-
-const initialAccounts = [
-  { 
-    id: '1',
-    name: 'Fanpage Cửa Hàng A', 
-    provider: 'facebook', 
-    status: 'Đã kết nối',
-    pageId: 'fb_page_123',
-    tokenExpiry: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() // 30 days from now
-  },
-  { 
-    id: '2',
-    name: 'IG @shop.a', 
-    provider: 'instagram', 
-    status: 'Đã kết nối',
-    pageId: 'ig_biz_456',
-    tokenExpiry: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString() // 5 days from now
-  },
-  { 
-    id: '3',
-    name: 'Zalo OA /shopa', 
-    provider: 'zalo', 
-    status: 'Đã kết nối',
-    pageId: 'zalo_oa_789',
-    tokenExpiry: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString() // 60 days from now
-  },
-];
-
-const initialLogs = [
-  '✔️ 10:30 — Đăng bài lên Fanpage Cửa Hàng A thành công',
-  '⚠️ 09:15 — Token IG sắp hết hạn (5 ngày)',
-  'ℹ️ 08:00 — Cron: quét lịch đăng (15s)'
-];
-
-const initialSettings = {
-  notifySuccess: true,
-  notifyFail: true,
-  notifyToken: true,
-  timezone: 'Asia/Ho_Chi_Minh',
-  golden: ['09:00', '12:30', '20:00'],
-  rateLimit: 10,
-};
 
 const mainTabs = [
   { id: 'calendar', label: 'Lịch' },
@@ -154,15 +59,24 @@ function AppPageContent() {
   const [isFullActivityLogsOpen, setIsFullActivityLogsOpen] = useState(false);
   const [posts, setPosts] = useState<Post[]>([]);
   const [accounts, setAccounts] = useState<any[]>([]); // Start with empty array, load from API
-  const [logs, setLogs] = useState(initialLogs);
-  const [settings, setSettings] = useState(initialSettings);
+  const [logs, setLogs] = useState<string[]>([]);
+  const [settings, setSettings] = useState({
+    notifySuccess: true,
+    notifyFail: true,
+    notifyToken: true,
+    timezone: 'Asia/Ho_Chi_Minh',
+    golden: ['09:00', '12:30', '20:00'],
+    rateLimit: 10,
+  });
   const [selectedDateForCompose, setSelectedDateForCompose] = useState<Date | null>(null);
   const [editingPost, setEditingPost] = useState<Post | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const { toasts, toast, removeToast } = useToast();
-  
-  // Ref for refreshing AI usage stats
-  const aiUsageIndicatorRef = useRef<AIUsageIndicatorRef>(null);
+
+  // Helper function to add log with proper typing
+  const addLog = (message: string) => {
+    setLogs((prev: string[]) => [message, ...prev]);
+  };
 
   // Fetch posts from API on component mount
   useEffect(() => {
@@ -195,8 +109,8 @@ function AppPageContent() {
       } catch (error) {
         console.error('Error fetching posts:', error);
         toast.error('Lỗi khi tải bài đăng');
-        // Fallback to mock data if API fails
-        setPosts(initialPosts);
+        // No fallback to mock data - show empty state
+        setPosts([]);
       } finally {
         setIsLoading(false);
       }
@@ -401,13 +315,6 @@ function AppPageContent() {
     }
   };
 
-  // Callback to refresh AI usage stats after AI usage
-  const handleAIUsageUpdate = () => {
-    if (aiUsageIndicatorRef.current) {
-      aiUsageIndicatorRef.current.refresh();
-    }
-  };
-
   const handleComposeSubmit = async (data: {
     title: string;
     content: string;
@@ -491,10 +398,10 @@ function AppPageContent() {
       }, 500);
       
       if (isEditing) {
-        setLogs(prev => [`✔️ ${timeStr} — Cập nhật bài đăng thành công${imageInfo}`, ...prev]);
+        setLogs((prev: string[]) => [`✔️ ${timeStr} — Cập nhật bài đăng thành công${imageInfo}`, ...prev]);
         toast.success(`Cập nhật bài đăng thành công!${imageInfo}`);
       } else {
-        setLogs(prev => [`✔️ ${timeStr} — Lên lịch bài mới thành công${imageInfo}`, ...prev]);
+        setLogs((prev: string[]) => [`✔️ ${timeStr} — Lên lịch bài mới thành công${imageInfo}`, ...prev]);
         toast.success(`Lên lịch bài đăng thành công!${imageInfo}`);
       }
     } catch (error: any) {
@@ -518,7 +425,7 @@ function AppPageContent() {
       const now = new Date();
       const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       const action = data.postId ? 'cập nhật' : 'tạo';
-      setLogs(prev => [`❌ ${timeStr} — Lỗi ${action} bài đăng: ${error.message}`, ...prev]);
+      setLogs((prev: string[]) => [`❌ ${timeStr} — Lỗi ${action} bài đăng: ${error.message}`, ...prev]);
       toast.error(`Lỗi ${action} bài đăng: ${error.message}`);
     }
   };
@@ -573,10 +480,10 @@ function AppPageContent() {
       
       if (updates.datetime) {
         const newDate = new Date(updates.datetime).toLocaleDateString('vi-VN');
-        setLogs(prev => [`📅 ${timeStr} — Đã chuyển bài đến ${newDate}`, ...prev]);
+        setLogs((prev: string[]) => [`📅 ${timeStr} — Đã chuyển bài đến ${newDate}`, ...prev]);
         toast.success(`Đã chuyển bài đến ${newDate}`);
       } else {
-        setLogs(prev => [`✔️ ${timeStr} — Cập nhật bài đăng thành công`, ...prev]);
+        setLogs((prev: string[]) => [`✔️ ${timeStr} — Cập nhật bài đăng thành công`, ...prev]);
         toast.success('Cập nhật bài đăng thành công!');
       }
       
@@ -594,7 +501,7 @@ function AppPageContent() {
       
       const now = new Date();
       const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      setLogs(prev => [`❌ ${timeStr} — Lỗi cập nhật bài: ${error.message}`, ...prev]);
+      setLogs((prev: string[]) => [`❌ ${timeStr} — Lỗi cập nhật bài: ${error.message}`, ...prev]);
       toast.error(`Lỗi cập nhật bài đăng: ${error.message}`);
     }
   };
@@ -626,7 +533,7 @@ function AppPageContent() {
         
         const now = new Date();
         const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        setLogs(prev => [`🗑️ ${timeStr} — Đã xóa bài: ${post.title}`, ...prev]);
+        setLogs((prev: string[]) => [`🗑️ ${timeStr} — Đã xóa bài: ${post.title}`, ...prev]);
         toast.success('Đã xóa bài đăng thành công!');
       }
       
@@ -641,7 +548,7 @@ function AppPageContent() {
       
       const now = new Date();
       const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      setLogs(prev => [`❌ ${timeStr} — Lỗi xóa bài: ${error.message}`, ...prev]);
+      setLogs((prev: string[]) => [`❌ ${timeStr} — Lỗi xóa bài: ${error.message}`, ...prev]);
       toast.error(`Lỗi xóa bài đăng: ${error.message}`);
     }
   };
@@ -653,7 +560,7 @@ function AppPageContent() {
     
     const now = new Date();
     const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    setLogs(prev => [`✏️ ${timeStr} — Mở chỉnh sửa bài: ${post.title}`, ...prev]);
+    setLogs((prev: string[]) => [`✏️ ${timeStr} — Mở chỉnh sửa bài: ${post.title}`, ...prev]);
   };
 
   const handleCreatePostFromCalendar = (date: Date) => {
@@ -664,7 +571,7 @@ function AppPageContent() {
     const now = new Date();
     const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const dateStr = date.toLocaleDateString('vi-VN');
-    setLogs(prev => [`📝 ${timeStr} — Tạo bài đăng mới cho ngày ${dateStr}`, ...prev]);
+    setLogs((prev: string[]) => [`📝 ${timeStr} — Tạo bài đăng mới cho ngày ${dateStr}`, ...prev]);
   };
 
   const handleRefreshToken = async (accountId: string) => {
@@ -672,7 +579,7 @@ function AppPageContent() {
     const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const account = accounts.find(acc => acc.id === accountId);
     if (account) {
-      setLogs(prev => [`ℹ️ ${timeStr} — Làm mới token cho ${account.name}`, ...prev]);
+      setLogs((prev: string[]) => [`ℹ️ ${timeStr} — Làm mới token cho ${account.name}`, ...prev]);
       toast.info(`Đang làm mới token cho ${account.name}...`);
       
       // Simulate token refresh
@@ -682,7 +589,7 @@ function AppPageContent() {
             ? { ...acc, tokenExpiry: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString() }
             : acc
         ));
-        setLogs(prev => [`✔️ ${timeStr} — Token ${account.name} đã được làm mới`, ...prev]);
+        setLogs((prev: string[]) => [`✔️ ${timeStr} — Token ${account.name} đã được làm mới`, ...prev]);
         toast.success(`Token ${account.name} đã được làm mới thành công`);
       }, 1000);
     }
@@ -724,7 +631,7 @@ function AppPageContent() {
         
         const now = new Date();
         const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        setLogs(prev => [`⚠️ ${timeStr} — Ngắt kết nối ${account.name}`, ...prev]);
+        setLogs((prev: string[]) => [`⚠️ ${timeStr} — Ngắt kết nối ${account.name}`, ...prev]);
         toast.success(`Đã hủy kết nối ${account.name} thành công!`);
       } else {
         throw new Error(result.error || 'Unknown error');
@@ -743,7 +650,7 @@ function AppPageContent() {
     }
 
     try {
-      // Redirect to OAuth endpoint instead of creating fake accounts
+      // Redirect to OAuth endpoint for secure account connection
       const baseUrl = window.location.origin;
       const oauthUrl = `${baseUrl}/api/auth/oauth/${provider}`;
       
@@ -803,15 +710,23 @@ function AppPageContent() {
     
     const now = new Date();
     const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    setLogs(prev => [`✔️ ${timeStr} — Lưu cài đặt thành công`, ...prev]);
+    setLogs((prev: string[]) => [`✔️ ${timeStr} — Lưu cài đặt thành công`, ...prev]);
     toast.success('Đã lưu cài đặt thành công!');
   };
 
   const handleResetSettings = () => {
-    setSettings(initialSettings);
+    const defaultSettings = {
+      notifySuccess: true,
+      notifyFail: true,
+      notifyToken: true,
+      timezone: 'Asia/Ho_Chi_Minh',
+      golden: ['09:00', '12:30', '20:00'],
+      rateLimit: 10,
+    };
+    setSettings(defaultSettings);
     const now = new Date();
     const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    setLogs(prev => [`ℹ️ ${timeStr} — Khôi phục cài đặt mặc định`, ...prev]);
+    setLogs((prev: string[]) => [`ℹ️ ${timeStr} — Khôi phục cài đặt mặc định`, ...prev]);
     toast.info('Đã khôi phục cài đặt mặc định');
   };
 
@@ -899,7 +814,6 @@ function AppPageContent() {
           onOpenCompose={() => setIsComposeOpen(true)} 
           currentTab={currentTab}
           onTabChange={handleTabChange}
-          aiUsageIndicatorRef={aiUsageIndicatorRef}
         />
         
         <div className="grid flex-1 grid-rows-[auto,1fr] gap-4 p-4">
@@ -941,7 +855,6 @@ function AppPageContent() {
         goldenHours={settings.golden}
         defaultDateTime={selectedDateForCompose}
         editingPost={editingPost}
-        onAIUsageUpdate={handleAIUsageUpdate}
         onActivityLogsUpdate={refreshActivityLogs}
       />
       

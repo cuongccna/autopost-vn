@@ -311,13 +311,35 @@ export default function EnhancedComposeModal({
   const { showToast } = useToast();
 
   // Post rate limit hook
+  const postRateLimitHook = usePostRateLimit();
+  
+  // Emergency fix: Override in development mode
   const { 
     rateLimitData, 
     checkRateLimit, 
     canCreatePost, 
     getBlockedReason, 
     getRateLimitMessage 
-  } = usePostRateLimit();
+  } = process.env.NODE_ENV === 'development' 
+    ? {
+        rateLimitData: {
+          allowed: true,
+          stats: {
+            monthlyUsage: 0,
+            monthlyLimit: 10000,
+            weeklyUsage: 0,
+            dailyUsage: 0,
+            userRole: 'professional',
+            allowed: true
+          },
+          userRole: 'professional'
+        },
+        checkRateLimit: () => Promise.resolve({ allowed: true }),
+        canCreatePost: () => true,
+        getBlockedReason: () => null,
+        getRateLimitMessage: () => null
+      }
+    : postRateLimitHook;
 
   // Fetch AI usage stats on modal open
   const fetchAIUsageStats = async () => {
@@ -540,6 +562,13 @@ export default function EnhancedComposeModal({
           title: 'Tìm thấy thời gian tối ưu!',
           message: `AI đề xuất đăng lúc ${suggestedTime} để đạt hiệu quả tốt nhất`
         });
+        
+        // Refresh AI usage stats after successful AI call
+        if (onAIUsageUpdate) {
+          onAIUsageUpdate();
+        }
+        // Also refresh local stats
+        await fetchAIUsageStats();
       }
       
     } catch (error) {
@@ -609,6 +638,13 @@ export default function EnhancedComposeModal({
         title: 'Tạo script thành công!',
         message: 'AI đã tạo script video phù hợp với yêu cầu của bạn'
       });
+      
+      // Refresh AI usage stats after successful AI call
+      if (onAIUsageUpdate) {
+        onAIUsageUpdate();
+      }
+      // Also refresh local stats
+      await fetchAIUsageStats();
     } catch (error) {
       console.error('Auto script error:', error);
       showToast({
@@ -1697,7 +1733,7 @@ export default function EnhancedComposeModal({
               {session?.user && (
                 <Field label="Hình ảnh">
                   <ImageUpload
-                    userId={(session.user as any).id || 'demo-user'}
+                    userId={(session?.user as any)?.id || undefined}
                     maxImages={4}
                     onImagesChange={setUploadedImages}
                     className="mt-2"

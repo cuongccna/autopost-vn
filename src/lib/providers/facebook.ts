@@ -1,1 +1,4 @@
-export async function publishToFacebookPage(){return{ok:true,external_post_id:'fb_demo'};}
+export async function publishToFacebookPage(postData: any, accessToken: string) {
+  // TODO: Implement real Facebook API integration
+  throw new Error('Facebook publishing not implemented yet');
+}

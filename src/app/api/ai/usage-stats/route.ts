@@ -12,7 +12,15 @@ export async function GET(request: NextRequest) {
 
     const userId = (session.user as any).id || session.user.email;
     
+    console.log('🧠 [AI-STATS] Request for user:', {
+      sessionUserId: (session.user as any).id,
+      sessionEmail: session.user.email,
+      actualUserId: userId
+    });
+    
     const stats = await getAIUsageStats(userId);
+    
+    console.log('📊 [AI-STATS] Retrieved stats:', stats);
     
     if (!stats) {
       return NextResponse.json(
@@ -20,6 +28,14 @@ export async function GET(request: NextRequest) {
         { status: 500 }
       );
     }
+
+    console.log('✅ [AI-STATS] Returning stats:', {
+      dailyUsage: stats.dailyUsage,
+      dailyLimit: stats.dailyLimit,
+      monthlyUsage: stats.monthlyUsage,
+      monthlyLimit: stats.monthlyLimit,
+      userRole: stats.userRole
+    });
 
     return NextResponse.json({
       stats,

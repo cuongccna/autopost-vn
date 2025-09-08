@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { OAuthTokenManager } from './TokenEncryptionService';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -118,7 +119,7 @@ export class UserManagementService {
       provider: account.provider as 'facebook' | 'instagram' | 'zalo',
       account_name: account.name || account.username || 'Unknown',
       provider_account_id: account.provider_id,
-      access_token: account.token_encrypted || '', // Will need to decrypt in real usage
+      access_token: OAuthTokenManager.decryptForUse(account.token_encrypted || ''),
       refresh_token: account.refresh_token_encrypted,
       token_expires_at: account.expires_at,
       account_data: {
@@ -160,8 +161,8 @@ export class UserManagementService {
       name: oauthData.account_info.name || `${provider} Account`,
       username: oauthData.account_info.username || oauthData.account_info.providerId,
       avatar_url: oauthData.account_info.profile_picture,
-      token_encrypted: btoa(oauthData.access_token), // Simple encoding - use proper encryption in production
-      refresh_token_encrypted: oauthData.refresh_token ? btoa(oauthData.refresh_token) : null,
+      token_encrypted: OAuthTokenManager.encryptForStorage(oauthData.access_token),
+      refresh_token_encrypted: oauthData.refresh_token ? OAuthTokenManager.encryptForStorage(oauthData.refresh_token) : null,
       expires_at: oauthData.expires_in
         ? new Date(Date.now() + oauthData.expires_in * 1000).toISOString()
         : null,
@@ -294,9 +295,9 @@ export class UserManagementService {
     const { data, error } = await supabase
       .from('autopostvn_social_accounts')
       .update({
-        token_encrypted: btoa(newTokenData.access_token),
+        token_encrypted: OAuthTokenManager.encryptForStorage(newTokenData.access_token),
         refresh_token_encrypted: newTokenData.refresh_token 
-          ? btoa(newTokenData.refresh_token) 
+          ? OAuthTokenManager.encryptForStorage(newTokenData.refresh_token) 
           : account.refresh_token_encrypted,
         expires_at: newTokenData.expires_in
           ? new Date(Date.now() + newTokenData.expires_in * 1000).toISOString()

@@ -1,21 +1,26 @@
 'use client';
 
 import React from 'react';
+import { useRouter } from 'next/navigation';
 import MobileSidebar from './MobileSidebar';
-import AIUsageIndicator from '../shared/AIUsageIndicator';
-import RoleBadge from '../shared/RoleBadge';
-import PostUsageIndicator from '../shared/PostUsageIndicator';
 import { UserAvatarDropdown } from '../shared/UserAvatarDropdown';
-import { AIUsageIndicatorRef } from '../shared/AIUsageIndicator';
+import AIStatusCompact from '../shared/AIStatusCompact';
+import AIStatusBadge from '../shared/AIStatusBadge';
 
 interface TopbarProps {
-  onOpenCompose: () => void;
+  onOpenCompose?: () => void; // Make optional for backward compatibility
   currentTab: string;
   onTabChange: (_tab: string) => void;
-  aiUsageIndicatorRef?: React.RefObject<AIUsageIndicatorRef>;
 }
 
-export default function Topbar({ onOpenCompose, currentTab, onTabChange, aiUsageIndicatorRef }: TopbarProps) {
+export default function Topbar({ onOpenCompose, currentTab, onTabChange }: TopbarProps) {
+  const router = useRouter();
+
+  const handleCreatePost = () => {
+    // Try new dedicated page first, fallback to modal if onOpenCompose provided
+    router.push('/compose');
+  };
+
   return (
     <div className="flex items-center justify-between border-b bg-white px-4 py-3">
       <div className="flex items-center gap-4">
@@ -29,11 +34,9 @@ export default function Topbar({ onOpenCompose, currentTab, onTabChange, aiUsage
         </div>
       </div>
       <div className="flex items-center gap-3">
-        <PostUsageIndicator className="hidden sm:flex" />
-        <AIUsageIndicator ref={aiUsageIndicatorRef} className="hidden sm:flex" />
-        <RoleBadge size="sm" className="hidden md:flex" />
+        <AIStatusCompact />
         <button 
-          onClick={onOpenCompose}
+          onClick={handleCreatePost}
           className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700"
         >
           <span className="hidden sm:inline">➕ Tạo bài đăng</span>

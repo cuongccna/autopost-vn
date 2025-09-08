@@ -103,15 +103,27 @@ export const authOptions: NextAuthOptions = {
     async jwt({ token, user }) {
       if (user) {
         token.id = user.id
-        // Get user's role from Supabase auth.users
+        // Get user's role from Supabase
         try {
+          // First try to get from auth.users user_metadata
           const { data: authUser } = await supabase.auth.admin.getUserById(user.id);
           if (authUser.user) {
-            token.role = authUser.user.app_metadata?.role || 'free';
+            token.user_role = authUser.user.user_metadata?.user_role || 
+                             authUser.user.app_metadata?.role || 
+                             'free';
+          } else {
+            // Fallback: get from our custom users table
+            const { data: userData } = await supabase
+              .from('autopostvn_users')
+              .select('user_role')
+              .eq('id', user.id)
+              .single();
+            
+            token.user_role = userData?.user_role || 'free';
           }
         } catch (error) {
           console.error('Error fetching user role:', error);
-          token.role = 'free';
+          token.user_role = 'free';
         }
       }
       return token
@@ -119,7 +131,7 @@ export const authOptions: NextAuthOptions = {
     async session({ session, token }) {
       if (token && session.user) {
         (session.user as any).id = token.id as string;
-        (session.user as any).role = token.role as string;
+        (session.user as any).user_role = token.user_role as string;
       }
       return session
     }

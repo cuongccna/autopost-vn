@@ -45,24 +45,9 @@ export default function AIUsageDashboard() {
       const data = await response.json();
       setStats(data.stats);
       
-      // Mock history data for demo (replace with real API)
-      setHistory([
-        { 
-          date: '2024-01-15', 
-          usage: 8, 
-          requests: { caption: 3, hashtags: 2, script: 2, optimal_times: 1 } 
-        },
-        { 
-          date: '2024-01-14', 
-          usage: 5, 
-          requests: { caption: 2, hashtags: 1, script: 1, optimal_times: 1 } 
-        },
-        { 
-          date: '2024-01-13', 
-          usage: 12, 
-          requests: { caption: 4, hashtags: 3, script: 3, optimal_times: 2 } 
-        },
-      ]);
+      // TODO: Fetch real history data from API
+      // For now, keep history empty until API is implemented
+      setHistory([]);
       
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error');

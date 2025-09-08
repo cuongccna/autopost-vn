@@ -45,16 +45,33 @@ const statusNames = {
 export default function ActivityLogsView({ 
   workspaceId, 
   showFilters = true, 
-  limit = 50 
+  limit = 20 
 }: ActivityLogsViewProps) {
-  const [filters, setFilters] = useState<ActivityLogFilters>({ limit });
+  const [filters, setFilters] = useState<ActivityLogFilters>({ 
+    limit,
+    offset: 0 
+  });
+  const [currentPage, setCurrentPage] = useState(1);
   const { logs, loading, error, hasMore, total, fetchLogs, loadMore } = useActivityLogs(filters);
 
   const handleFilterChange = (newFilters: Partial<ActivityLogFilters>) => {
     const updatedFilters = { ...filters, ...newFilters, offset: 0 };
     setFilters(updatedFilters);
+    setCurrentPage(1);
     fetchLogs(updatedFilters);
   };
+
+  const handlePageChange = (page: number) => {
+    const offset = (page - 1) * limit;
+    const updatedFilters = { ...filters, offset };
+    setFilters(updatedFilters);
+    setCurrentPage(page);
+    fetchLogs(updatedFilters);
+  };
+
+  const totalPages = Math.ceil((total || 0) / limit);
+  const hasNextPage = currentPage < totalPages;
+  const hasPrevPage = currentPage > 1;
 
   const formatDateTime = (dateString: string) => {
     return format(new Date(dateString), 'dd/MM/yyyy HH:mm:ss', { locale: vi });
@@ -204,8 +221,57 @@ export default function ActivityLogsView({
         )}
       </div>
 
-      {/* Load More */}
-      {hasMore && (
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between pt-4 border-t border-gray-200 bg-gray-50 px-4 py-3 rounded-lg">
+          <div className="text-sm text-gray-700">
+            Hiển thị {((currentPage - 1) * limit) + 1} - {Math.min(currentPage * limit, total || 0)} trong {total || 0} kết quả
+          </div>
+          
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={() => handlePageChange(currentPage - 1)}
+              disabled={!hasPrevPage || loading}
+              className="px-3 py-2 text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              ← Trước
+            </button>
+            
+            <div className="flex items-center space-x-1">
+              {[...Array(Math.min(5, totalPages))].map((_, i) => {
+                const pageNum = Math.max(1, currentPage - 2) + i;
+                if (pageNum > totalPages) return null;
+                
+                return (
+                  <button
+                    key={pageNum}
+                    onClick={() => handlePageChange(pageNum)}
+                    disabled={loading}
+                    className={`px-3 py-2 text-sm font-medium rounded-lg disabled:opacity-50 ${
+                      pageNum === currentPage
+                        ? 'bg-blue-600 text-white'
+                        : 'text-gray-500 bg-white border border-gray-300 hover:bg-gray-50'
+                    }`}
+                  >
+                    {pageNum}
+                  </button>
+                );
+              })}
+            </div>
+            
+            <button
+              onClick={() => handlePageChange(currentPage + 1)}
+              disabled={!hasNextPage || loading}
+              className="px-3 py-2 text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Sau →
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Load More - Keep as fallback */}
+      {hasMore && totalPages <= 1 && (
         <div className="text-center">
           <button
             onClick={loadMore}
