@@ -16,19 +16,25 @@ const oauthSteps = {
     '1. Chọn "Kết nối Facebook Page"',
     '2. Đăng nhập Facebook và cho phép quyền',
     '3. Chọn Page bạn muốn quản lý',
-    '4. Xác nhận các quyền: pages_manage_posts, pages_read_engagement'
+    '4. Xác nhận các quyền: pages_show_list, pages_read_engagement'
   ],
   instagram: [
     '1. Chọn "Kết nối Instagram Business"',
     '2. Đăng nhập Facebook (Instagram Business cần FB)',
     '3. Chọn Instagram Business Account',
-    '4. Xác nhận quyền: instagram_basic, content_publish'
+    '4. Xác nhận quyền: pages_show_list, pages_read_engagement'
   ],
   zalo: [
     '1. Chọn "Kết nối Zalo OA"',
     '2. Đăng nhập Zalo Developer',
     '3. Chọn Official Account',
     '4. Xác nhận quyền gửi bài viết và media'
+  ],
+  buffer: [
+    '1. Chọn "Kết nối Buffer"',
+    '2. Đăng nhập Buffer và cho phép quyền',
+    '3. Buffer sẽ tự động đồng bộ tất cả social accounts',
+    '4. Quản lý posts qua Buffer API'
   ]
 };
 
@@ -161,20 +167,26 @@ export default function AddAccountModal({ isOpen, onClose, onConnect, onDisconne
                   <div className="mt-3 flex flex-wrap gap-1">
                     {key === 'facebook' && (
                       <>
-                        <span className="px-2 py-1 bg-blue-50 text-blue-700 text-xs rounded-md">pages_manage_posts</span>
+                        <span className="px-2 py-1 bg-blue-50 text-blue-700 text-xs rounded-md">pages_show_list</span>
                         <span className="px-2 py-1 bg-blue-50 text-blue-700 text-xs rounded-md">pages_read_engagement</span>
                       </>
                     )}
                     {key === 'instagram' && (
                       <>
-                        <span className="px-2 py-1 bg-pink-50 text-pink-700 text-xs rounded-md">instagram_basic</span>
-                        <span className="px-2 py-1 bg-pink-50 text-pink-700 text-xs rounded-md">content_publish</span>
+                        <span className="px-2 py-1 bg-pink-50 text-pink-700 text-xs rounded-md">pages_show_list</span>
+                        <span className="px-2 py-1 bg-pink-50 text-pink-700 text-xs rounded-md">pages_read_engagement</span>
                       </>
                     )}
                     {key === 'zalo' && (
                       <>
                         <span className="px-2 py-1 bg-sky-50 text-sky-700 text-xs rounded-md">send_message</span>
                         <span className="px-2 py-1 bg-sky-50 text-sky-700 text-xs rounded-md">manage_oa</span>
+                      </>
+                    )}
+                    {key === 'buffer' && (
+                      <>
+                        <span className="px-2 py-1 bg-purple-50 text-purple-700 text-xs rounded-md">manage_all_profiles</span>
+                        <span className="px-2 py-1 bg-purple-50 text-purple-700 text-xs rounded-md">schedule_posts</span>
                       </>
                     )}
                   </div>

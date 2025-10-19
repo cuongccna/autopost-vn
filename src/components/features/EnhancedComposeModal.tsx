@@ -344,13 +344,15 @@ export default function EnhancedComposeModal({
   // Fetch AI usage stats on modal open
   const fetchAIUsageStats = async () => {
     try {
-      const response = await fetch('/api/ai/usage-stats');
+      const response = await fetch('/api/limits?scope=ai');
       if (response.ok) {
         const data = await response.json();
-        setAiUsageStats(data.stats);
+        // Normalize shape if needed
+        const aiStats = (data.stats ?? data?.ai?.stats);
+        setAiUsageStats(aiStats);
       }
-    } catch (error) {
-      console.error('Error fetching AI usage stats:', error);
+    } catch (e) {
+      console.error('Failed to fetch AI usage stats', e);
     }
   };
 

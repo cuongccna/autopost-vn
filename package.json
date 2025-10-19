@@ -15,6 +15,7 @@
     "cron": "tsx scripts/cron-local.ts",
     "cron:local": "ts-node --transpile-only scripts/cron-local.ts",
     "cron:js": "node scripts/cron-scheduler.js",
+    "cron:5m": "node scripts/cron-interval.js",
     "cron:windows": "powershell -ExecutionPolicy Bypass -File scripts/autopost-cron.ps1",
     "cron:render": "node scripts/render-cron.js",
     "health": "curl http://localhost:3000/api/health || echo 'App not running'",
@@ -22,6 +23,7 @@
     "test:api": "echo 'Test API endpoints - implement with your preferred testing framework'",
     "test:routing": "echo 'Test routing: localhost:3000 → /auth/signup → /auth/signin → /app'",
     "backend:check": "npm run type-check && npm run lint",
+    "ci": "npm run lint && npm run type-check && npm test && npm run build",
     "clear-cache": "rm -rf .next && npm run dev"
   },
   "dependencies": {

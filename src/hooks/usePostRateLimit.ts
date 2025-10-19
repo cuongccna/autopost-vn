@@ -95,7 +95,7 @@ export function usePostRateLimit() {
     lastFetchRef.current = now;
     
     try {
-      const response = await fetch('/api/posts/check-rate-limit', {
+      const response = await fetch('/api/limits?scope=posts', {
         signal: abortControllerRef.current.signal
       });
       
@@ -104,8 +104,14 @@ export function usePostRateLimit() {
       }
       
       const data = await response.json();
-      setRateLimitData(data);
-      return data;
+      const normalized = {
+        allowed: data.allowed ?? data?.posts?.allowed ?? false,
+        stats: (data.stats ?? data?.posts?.stats) as PostLimitStats,
+        message: data.message ?? data?.posts?.message,
+        userRole: (data.stats?.userRole ?? data?.posts?.stats?.userRole ?? 'free') as string
+      } as RateLimitCheck;
+      setRateLimitData(normalized);
+      return normalized;
       
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError') {

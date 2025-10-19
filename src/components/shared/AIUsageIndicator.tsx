@@ -36,7 +36,7 @@ const AIUsageIndicator = forwardRef<AIUsageIndicatorRef, AIUsageIndicatorProps>(
       
       // Add cache-busting timestamp
       const timestamp = new Date().getTime();
-      const response = await fetch(`/api/ai/usage-stats?t=${timestamp}`, {
+      const response = await fetch(`/api/limits?scope=ai&t=${timestamp}`, {
         cache: 'no-cache',
         headers: {
           'Cache-Control': 'no-cache',
@@ -51,9 +51,10 @@ const AIUsageIndicator = forwardRef<AIUsageIndicatorRef, AIUsageIndicatorProps>(
       const data = await response.json();
       console.log('📊 AI Usage Stats Response:', data);
       
-      if (data.stats) {
-        console.log('🔄 Setting new stats:', data.stats);
-        setStats(data.stats);
+      const statsData = (data.stats ?? data?.ai?.stats);
+      if (statsData) {
+        console.log('🔄 Setting new stats:', statsData);
+        setStats(statsData);
         console.log('✅ Stats updated successfully');
       } else {
         throw new Error('No stats in response');

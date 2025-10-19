@@ -173,9 +173,10 @@ export default function AccountsManagement({
           <div className="mt-4 rounded-xl bg-gray-50 p-3 text-xs text-gray-600">
             <div className="font-medium mb-1">Quyền & Scopes</div>
             <ul className="list-disc pl-5 space-y-1">
-              <li>Facebook Page: pages_manage_posts, pages_read_engagement</li>
-              <li>Instagram Biz: instagram_basic, content_publish</li>
+              <li>Facebook Page: pages_show_list, pages_read_engagement</li>
+              <li>Instagram Biz: pages_show_list, pages_read_engagement</li>
               <li>Zalo OA: gửi bài viết, media</li>
+              <li>Buffer: manage_all_profiles, schedule_posts</li>
             </ul>
           </div>
         </div>

@@ -31,7 +31,8 @@ export async function runScheduler(limit = 10): Promise<ProcessingResult> {
   console.log(`🔄 [SCHEDULER] Starting scheduler run with limit: ${limit}`);
   
   const sb = sbServer(true);
-  const now = new Date().toISOString();
+  // Allow 5 minutes leeway to absorb client timezone drift and near-future scheduling
+  const nowLeeway = new Date(Date.now() + 5 * 60 * 1000).toISOString();
   const result: ProcessingResult = {
     processed: 0,
     successful: 0,
@@ -52,7 +53,7 @@ export async function runScheduler(limit = 10): Promise<ProcessingResult> {
         status,
         retry_count
       `)
-      .lte('scheduled_at', now)
+      .lte('scheduled_at', nowLeeway)
       .eq('status', 'pending')
       .order('scheduled_at', { ascending: true })
       .limit(limit);
@@ -69,12 +70,13 @@ export async function runScheduler(limit = 10): Promise<ProcessingResult> {
 
     console.log(`📋 [SCHEDULER] Found ${jobs.length} pending jobs`);
 
-    // Đánh dấu jobs đang được xử lý
+    // Đánh dấu jobs đang được xử lý (idempotent protection: only if still pending)
     const jobIds = jobs.map(j => j.id);
     await sb
       .from('autopostvn_post_schedules')
-      .update({ status: 'publishing' })
-      .in('id', jobIds);
+      .update({ status: 'publishing', updated_at: new Date().toISOString() })
+      .in('id', jobIds)
+      .eq('status', 'pending');
 
     // Xử lý từng job
     for (const job of jobs) {
@@ -139,6 +141,24 @@ export async function runScheduler(limit = 10): Promise<ProcessingResult> {
         };
 
         const publisher = createPublisher(socialAccount);
+        // Idempotency: skip if already published by concurrent worker
+        const { data: freshJob } = await sb
+          .from('autopostvn_post_schedules')
+          .select('status')
+          .eq('id', job.id)
+          .single();
+        if (freshJob?.status === 'published') {
+          console.log(`⏩ [SCHEDULER] Job ${job.id} already published, skipping`);
+          result.skipped++;
+          result.details.push({
+            scheduleId: job.id,
+            postId: job.post_id,
+            status: 'skipped',
+            message: 'Already published by another worker'
+          });
+          continue;
+        }
+
         const publishResult = await publisher.publish(publishData);
 
         // Log publish activity

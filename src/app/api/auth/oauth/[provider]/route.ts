@@ -17,12 +17,15 @@ const PROVIDER_MAPPING = {
 const OAUTH_CONFIGS = {
   facebook: {
     baseUrl: 'https://www.facebook.com/v18.0/dialog/oauth',
-    scope: 'public_profile,pages_show_list,pages_read_engagement',
+    // ✅ Phase 1: Basic permissions (available by default)
+    // Note: pages_* permissions require Facebook Login + Pages API setup
+    scope: 'public_profile,email',
     redirectUri: `${process.env.NEXTAUTH_URL}/api/auth/oauth/facebook/callback`
   },
   instagram: {
     baseUrl: 'https://www.facebook.com/v18.0/dialog/oauth',
-    scope: 'public_profile,pages_show_list',
+    // ✅ Instagram Business via Facebook Pages API
+    scope: 'public_profile',
     redirectUri: `${process.env.NEXTAUTH_URL}/api/auth/oauth/instagram/callback`
   },
   zalo: {

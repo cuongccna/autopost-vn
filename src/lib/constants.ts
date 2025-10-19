@@ -17,6 +17,12 @@ export const PROVIDERS = {
     chip: 'bg-sky-100 text-sky-700',
     apiKey: 'zalo'
   },
+  buffer: {
+    label: 'Buffer',
+    tag: 'BF',
+    chip: 'bg-purple-100 text-purple-700',
+    apiKey: 'buffer'
+  },
 } as const;
 
 export type ProviderKey = keyof typeof PROVIDERS;

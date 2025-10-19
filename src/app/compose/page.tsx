@@ -143,7 +143,8 @@ export default function ComposePage() {
         title: data.content?.substring(0, 100) || 'Untitled', // Create title from content
         content: data.content,
         providers: data.channels, // Map channels to providers
-        scheduled_at: data.scheduleAt && data.scheduleAt !== new Date().toISOString() ? data.scheduleAt : null, // Map scheduleAt to scheduled_at
+        // Normalize to UTC ISO string to avoid timezone drift
+        scheduled_at: data.scheduleAt ? new Date(data.scheduleAt).toISOString() : null,
         media_urls: data.mediaUrls || [],
         metadata: data.metadata || {}
       };

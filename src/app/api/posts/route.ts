@@ -136,6 +136,8 @@ export async function POST(request: NextRequest) {
     }
 
     const supabase = sbServer()
+    // Normalize scheduled time to UTC ISO string to avoid timezone drift
+    const normalizedScheduledAt = scheduled_at ? new Date(scheduled_at).toISOString() : null;
     
     // Get workspace using UserManagementService (same as dashboard and /api/user/accounts)
     const workspace = await userManagementService.getOrCreateUserWorkspace(session.user.email!);
@@ -149,7 +151,7 @@ export async function POST(request: NextRequest) {
         content,
         user_id: (session.user as any).id,
         providers: providers || [],
-        scheduled_at: scheduled_at || null,
+        scheduled_at: normalizedScheduledAt,
         media_urls: media_urls || [],
         status: scheduled_at ? 'scheduled' : 'draft',
       })
@@ -165,11 +167,11 @@ export async function POST(request: NextRequest) {
     }
 
     // Tạo post schedules nếu là scheduled post
-    if (scheduled_at && providers && providers.length > 0) {
+    if (normalizedScheduledAt && providers && providers.length > 0) {
       console.log(`🔄 [POST] Creating schedules for post ${post.id}, providers:`, providers);
-      await createPostSchedules(post.id, workspace.id, providers, scheduled_at);
+      await createPostSchedules(post.id, workspace.id, providers, normalizedScheduledAt);
     } else {
-      console.log(`⚠️ [POST] No schedules created - scheduled_at: ${scheduled_at}, providers:`, providers);
+      console.log(`⚠️ [POST] No schedules created - scheduled_at: ${normalizedScheduledAt}, providers:`, providers);
     }
 
     // Log post usage after successful creation

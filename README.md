@@ -35,6 +35,7 @@ Cập nhật các biến trong `.env.local`:
 - `SUPABASE_SERVICE_ROLE_KEY`: Service role key từ Supabase
 - `NEXTAUTH_SECRET`: Secret key cho NextAuth (tối thiểu 32 ký tự)
 - `NEXTAUTH_URL`: URL của ứng dụng (http://localhost:3000 cho dev)
+ - `DEBUG_API_ENABLED`: `true/false` để bật/tắt các debug API (mặc định nên để `false`)
 
 4. Setup Supabase Database:
 ```sql

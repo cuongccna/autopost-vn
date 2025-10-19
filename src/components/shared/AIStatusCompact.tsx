@@ -22,10 +22,11 @@ export default function AIStatusCompact() {
 
   const fetchStats = async () => {
     try {
-      const response = await fetch(`/api/ai/usage-stats?t=${Date.now()}`);
+      const response = await fetch(`/api/limits?scope=ai&t=${Date.now()}`);
       if (response.ok) {
         const data = await response.json();
-        setStats(data.stats);
+        const statsData = (data.stats ?? data?.ai?.stats) as AIUsageStats;
+        setStats(statsData);
       }
     } catch (error) {
       console.error('Error fetching AI stats:', error);

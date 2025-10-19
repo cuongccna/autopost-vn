@@ -43,7 +43,17 @@ export default withAuth(
           return true
         }
         
-        // Allow access to API routes (they handle their own auth)
+        // Strictly protect debug APIs: require feature flag + admin role
+        if (pathname.startsWith('/api/debug')) {
+          const debugEnabled = process.env.DEBUG_API_ENABLED === 'true'
+          if (!debugEnabled || !token) {
+            return false
+          }
+          const role = (token as any).user_role || (token as any).role
+          return role === 'admin'
+        }
+
+        // Allow access to other API routes (they handle their own auth)
         if (pathname.startsWith('/api/')) {
           return true
         }

@@ -7,17 +7,25 @@ import { userManagementService } from '@/lib/services/UserManagementService';
 const OAUTH_CONFIGS = {
   facebook: {
     authUrl: 'https://www.facebook.com/v18.0/dialog/oauth',
-    scope: 'pages_show_list,pages_read_engagement',
+    // ✅ Phase 1: Basic permissions (available by default)
+    // Note: pages_* permissions require Facebook Login + Pages API setup
+    scope: 'public_profile,email',
     responseType: 'code',
   },
   instagram: {
     authUrl: 'https://www.facebook.com/v18.0/dialog/oauth',
-    scope: 'pages_show_list,pages_read_engagement',
+    // ✅ Instagram Business via Facebook Pages API
+    scope: 'public_profile',
     responseType: 'code',
   },
   zalo: {
     authUrl: 'https://oauth.zaloapp.com/v4/oa/permission',
     scope: 'send_message,manage_page',
+    responseType: 'code',
+  },
+  buffer: {
+    authUrl: 'https://bufferapp.com/oauth2/authorize',
+    scope: '', // Buffer doesn't use scope parameter
     responseType: 'code',
   },
 };
@@ -76,7 +84,7 @@ function handleConnectRedirect(provider: string, userEmail: string) {
   });
 
   const authUrl = `${config.authUrl}?${params.toString()}`;
-  
+
   return NextResponse.redirect(authUrl);
 }
 
@@ -111,10 +119,10 @@ async function handleOAuthCallback(
 
     // Exchange code for access token
     const tokenData = await exchangeCodeForToken(provider, code);
-    
+
     // Get user/page information
     const accountInfo = await getAccountInfo(provider, tokenData.access_token);
-    
+
     // Save to database using UserManagementService
     const savedAccount = await userManagementService.saveOAuthAccount(
       userEmail,
@@ -128,7 +136,7 @@ async function handleOAuthCallback(
     );
 
     return NextResponse.redirect(
-      `${baseUrl}/app?oauth_success=${provider}&account=${encodeURIComponent(savedAccount.account_name)}`
+      `${baseUrl}/app?oauth_success=${provider}&accounts_saved=1&account=${encodeURIComponent(savedAccount.account_name)}`
     );
   } catch (error) {
     console.error('OAuth callback error:', error);
@@ -144,18 +152,18 @@ function getClientId(provider: string): string {
     instagram: process.env.FACEBOOK_CLIENT_ID!, // Instagram uses Facebook app
     zalo: process.env.ZALO_APP_ID!,
   };
-  
+
   return clientIds[provider as keyof typeof clientIds];
 }
 
 function getRedirectUri(provider: string): string {
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
-  
+
   // Zalo requires a simpler callback URL structure
   if (provider === 'zalo') {
     return `${baseUrl}/api/oauth/zalo/callback`;
   }
-  
+
   return `${baseUrl}/api/oauth/${provider}?action=callback`;
 }
 
@@ -203,7 +211,7 @@ async function getAccountInfo(provider: string, accessToken: string) {
   // Get account information from each provider
   const infoUrls = {
     facebook: 'https://graph.facebook.com/v18.0/me?fields=id,name,email',
-    instagram: 'https://graph.facebook.com/v18.0/me?fields=id,name,email', 
+    instagram: 'https://graph.facebook.com/v18.0/me?fields=id,name,email',
     zalo: 'https://openapi.zalo.me/v2.0/oa/getinfo',
   };
 
@@ -221,7 +229,7 @@ async function getAccountInfo(provider: string, accessToken: string) {
 
   const data = await response.json();
 
-  
+
   // Parse response based on provider
   if (provider === 'facebook' || provider === 'instagram') {
     // Facebook/Instagram returns user info, then we'll get pages separately

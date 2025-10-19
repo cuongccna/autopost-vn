@@ -48,7 +48,7 @@ export function useAIRateLimit(): UseAIRateLimitReturn {
     setError(null);
 
     try {
-      const response = await fetch('/api/ai/check-rate-limit', {
+      const response = await fetch('/api/limits?scope=ai', {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -60,7 +60,13 @@ export function useAIRateLimit(): UseAIRateLimitReturn {
       }
 
       const data = await response.json();
-      setRateLimitData(data);
+      // Normalize to AIRateLimitResult shape if needed
+      const normalized = {
+        allowed: data.allowed ?? data?.ai?.allowed ?? false,
+        stats: (data.stats ?? data?.ai?.stats) as AIRateLimitStats,
+        message: data.message ?? data?.ai?.message
+      } as AIRateLimitResult;
+      setRateLimitData(normalized);
 
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';

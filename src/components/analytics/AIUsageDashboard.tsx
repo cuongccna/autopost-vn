@@ -36,14 +36,15 @@ export default function AIUsageDashboard() {
   const fetchDashboardData = async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/ai/usage-stats');
+      const response = await fetch('/api/limits?scope=ai');
       
       if (!response.ok) {
         throw new Error('Failed to fetch usage stats');
       }
       
       const data = await response.json();
-      setStats(data.stats);
+      const statsData = (data.stats ?? data?.ai?.stats) as AIUsageStats;
+      setStats(statsData);
       
       // TODO: Fetch real history data from API
       // For now, keep history empty until API is implemented

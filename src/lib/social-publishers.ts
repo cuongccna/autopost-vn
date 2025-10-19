@@ -46,6 +46,51 @@ export abstract class BaseSocialPublisher {
       error: result.error
     });
   }
+
+  /**
+   * Perform fetch with timeout and basic retries for transient failures
+   */
+  protected async fetchWithRetry(
+    url: string,
+    init: { method?: string; headers?: Record<string, string>; body?: any; timeoutMs?: number } = {}
+  ): Promise<Response> {
+    const {
+      timeoutMs = 15000,
+      ...rest
+    } = init;
+
+    const maxAttempts = 3;
+    let attempt = 0;
+    let lastError: any;
+
+    while (attempt < maxAttempts) {
+      attempt++;
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        const res = await fetch(url, { ...(rest as any), signal: controller.signal } as any);
+        clearTimeout(timeout);
+
+        // Retry on 429/5xx
+        if (res.status === 429 || (res.status >= 500 && res.status < 600)) {
+          const backoff = 500 * Math.pow(2, attempt - 1);
+          await new Promise(r => setTimeout(r, backoff));
+          continue;
+        }
+        return res;
+      } catch (e) {
+        clearTimeout(timeout);
+        lastError = e;
+        // Retry on abort/network
+        if (attempt < maxAttempts) {
+          const backoff = 500 * Math.pow(2, attempt - 1);
+          await new Promise(r => setTimeout(r, backoff));
+          continue;
+        }
+      }
+    }
+    throw lastError || new Error('Network error');
+  }
 }
 
 /**
@@ -71,18 +116,24 @@ export class FacebookPublisher extends BaseSocialPublisher {
       let uploadedMediaIds: string[] = [];
       if (data.mediaUrls && data.mediaUrls.length > 0) {
         console.log('📸 Uploading media to Facebook...');
-        
-        for (const mediaUrl of data.mediaUrls) {
-          try {
-            const mediaId = await this.uploadMediaToFacebook(mediaUrl, accessToken, pageId);
-            if (mediaId) {
-              uploadedMediaIds.push(mediaId);
+        // Limit concurrent uploads to 3
+        const concurrency = 3;
+        let index = 0;
+        const results: string[] = [];
+        const uploadNext = async () => {
+          while (index < data.mediaUrls!.length) {
+            const current = index++;
+            const mediaUrl = data.mediaUrls![current];
+            try {
+              const mediaId = await this.uploadMediaToFacebook(mediaUrl, accessToken, pageId);
+              if (mediaId) results.push(mediaId);
+            } catch (err) {
+              console.error('Media upload failed:', err);
             }
-          } catch (mediaError) {
-            console.error('Media upload failed:', mediaError);
-            // Continue with other media or proceed without this one
           }
-        }
+        };
+        await Promise.all(new Array(Math.min(concurrency, data.mediaUrls.length)).fill(0).map(() => uploadNext()));
+        uploadedMediaIds = results;
       }
 
       // Prepare post data
@@ -125,12 +176,13 @@ export class FacebookPublisher extends BaseSocialPublisher {
       console.log('🚀 Calling Facebook API:', endpoint);
 
       // Call Facebook Graph API
-      const response = await fetch(endpoint, {
+      const response = await this.fetchWithRetry(endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(postData)
+        body: JSON.stringify(postData),
+        timeoutMs: 15000
       });
 
       const result = await response.json();
@@ -191,12 +243,13 @@ export class FacebookPublisher extends BaseSocialPublisher {
         published: false // Unpublished photo for later use in post
       };
 
-      const response = await fetch(`https://graph.facebook.com/v18.0/${pageId}/photos`, {
+      const response = await this.fetchWithRetry(`https://graph.facebook.com/v18.0/${pageId}/photos`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(uploadData)
+        body: JSON.stringify(uploadData),
+        timeoutMs: 20000
       });
 
       const result = await response.json();

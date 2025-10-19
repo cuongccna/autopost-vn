@@ -32,15 +32,22 @@ export default function PostUsageDashboard() {
   const fetchDashboardData = async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/posts/usage-stats?breakdown=true&days=30');
+      const [statsRes, breakdownRes] = await Promise.all([
+        fetch('/api/limits?scope=posts'),
+        fetch('/api/posts/usage-stats?breakdown=true&days=30')
+      ]);
       
-      if (!response.ok) {
-        throw new Error('Failed to fetch post usage stats');
+      if (!statsRes.ok) throw new Error('Failed to fetch post usage stats');
+      const statsJson = await statsRes.json();
+      const statsData = (statsJson.stats ?? statsJson?.posts?.stats) as PostUsageStats;
+      setStats(statsData);
+
+      if (breakdownRes.ok) {
+        const breakdownJson = await breakdownRes.json();
+        setBreakdown(breakdownJson.breakdown);
+      } else {
+        setBreakdown(null);
       }
-      
-      const data = await response.json();
-      setStats(data.stats);
-      setBreakdown(data.breakdown);
       
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error');
