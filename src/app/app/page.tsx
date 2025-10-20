@@ -9,7 +9,6 @@ import Calendar from '@/components/features/Calendar';
 import Queue from '@/components/features/Queue';
 import Analytics from '@/components/features/Analytics';
 import Activities from '@/components/features/Activities';
-import EnhancedComposeModal from '@/components/features/EnhancedComposeModal';
 import AccountsSidebar from '@/components/features/AccountsSidebar';
 import SystemLog from '@/components/features/SystemLog';
 import ActivityLogsWidget from '@/components/features/ActivityLogsWidget';
@@ -54,7 +53,6 @@ function AppPageContent() {
   const { refreshActivityLogs } = useActivityLogsRefresh();
   const [currentTab, setCurrentTab] = useState('calendar');
   const [currentMainTab, setCurrentMainTab] = useState('calendar');
-  const [isComposeOpen, setIsComposeOpen] = useState(false);
   const [isAddAccountOpen, setIsAddAccountOpen] = useState(false);
   const [isFullActivityLogsOpen, setIsFullActivityLogsOpen] = useState(false);
   const [posts, setPosts] = useState<Post[]>([]);
@@ -68,8 +66,6 @@ function AppPageContent() {
     golden: ['09:00', '12:30', '20:00'],
     rateLimit: 10,
   });
-  const [selectedDateForCompose, setSelectedDateForCompose] = useState<Date | null>(null);
-  const [editingPost, setEditingPost] = useState<Post | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const { toasts, toast, removeToast } = useToast();
 
@@ -315,7 +311,8 @@ function AppPageContent() {
     }
   };
 
-  const handleComposeSubmit = async (data: {
+  // DEPRECATED: Old modal-based compose - now using /compose page
+  /* const handleComposeSubmit = async (data: {
     title: string;
     content: string;
     channels: string[];
@@ -428,7 +425,7 @@ function AppPageContent() {
       setLogs((prev: string[]) => [`❌ ${timeStr} — Lỗi ${action} bài đăng: ${error.message}`, ...prev]);
       toast.error(`Lỗi ${action} bài đăng: ${error.message}`);
     }
-  };
+  }; */
 
   const handleAddAccount = () => {
     setIsAddAccountOpen(true);
@@ -554,9 +551,8 @@ function AppPageContent() {
   };
 
   const handleEditPost = (post: Post) => {
-    // Lưu post đang edit và mở compose modal
-    setEditingPost(post);
-    setIsComposeOpen(true);
+    // Chuyển đến trang /compose với post ID để edit
+    window.location.href = `/compose?edit=${post.id}`;
     
     const now = new Date();
     const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -564,9 +560,9 @@ function AppPageContent() {
   };
 
   const handleCreatePostFromCalendar = (date: Date) => {
-    // Lưu ngày được chọn và mở compose modal
-    setSelectedDateForCompose(date);
-    setIsComposeOpen(true);
+    // Chuyển đến trang /compose với ngày được chọn
+    const dateParam = date.toISOString();
+    window.location.href = `/compose?date=${encodeURIComponent(dateParam)}`;
     
     const now = new Date();
     const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -811,7 +807,7 @@ function AppPageContent() {
       
       <main className="flex min-w-0 flex-1 flex-col">
         <Topbar 
-          onOpenCompose={() => setIsComposeOpen(true)} 
+          onOpenCompose={() => window.location.href = '/compose'} 
           currentTab={currentTab}
           onTabChange={handleTabChange}
         />
@@ -843,20 +839,6 @@ function AppPageContent() {
           </div>
         </div>
       </main>
-      
-      <EnhancedComposeModal
-        isOpen={isComposeOpen}
-        onClose={() => {
-          setIsComposeOpen(false);
-          setSelectedDateForCompose(null);
-          setEditingPost(null);
-        }}
-        onSubmit={handleComposeSubmit}
-        goldenHours={settings.golden}
-        defaultDateTime={selectedDateForCompose}
-        editingPost={editingPost}
-        onActivityLogsUpdate={refreshActivityLogs}
-      />
       
       <AddAccountModal
         isOpen={isAddAccountOpen}

@@ -11,6 +11,7 @@ import { useToast } from '@/components/ui/Toast';
 import { usePostRateLimit } from '@/hooks/usePostRateLimit';
 import { activityLogger } from '@/lib/services/activityLogger';
 import ConfirmModal from '@/components/ui/ConfirmModal';
+import { mapProvidersToAPI } from '@/lib/constants';
 
 interface ComposeData {
   title: string;
@@ -142,7 +143,7 @@ export default function ComposePage() {
       const requestBody = {
         title: data.content?.substring(0, 100) || 'Untitled', // Create title from content
         content: data.content,
-        providers: data.channels, // Map channels to providers
+        providers: mapProvidersToAPI(data.channels), // 🔥 MAP UI providers to API providers
         // Normalize to UTC ISO string to avoid timezone drift
         scheduled_at: data.scheduleAt ? new Date(data.scheduleAt).toISOString() : null,
         media_urls: data.mediaUrls || [],

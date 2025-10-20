@@ -7,9 +7,11 @@ import { userManagementService } from '@/lib/services/UserManagementService';
 const OAUTH_CONFIGS = {
   facebook: {
     authUrl: 'https://www.facebook.com/v18.0/dialog/oauth',
-    // ✅ Phase 1: Basic permissions (available by default)
-    // Note: pages_* permissions require Facebook Login + Pages API setup
-    scope: 'public_profile,email',
+    // ✅ Full permissions for Facebook Pages posting
+    // Basic: public_profile, email (available by default)
+    // Pages: pages_show_list, pages_read_engagement (available in Development mode)
+    // Advanced: pages_manage_posts (requires App Review for Production)
+    scope: 'public_profile,email,pages_show_list,pages_read_engagement,pages_manage_posts',
     responseType: 'code',
   },
   instagram: {
@@ -123,7 +125,10 @@ async function handleOAuthCallback(
     // Get user/page information
     const accountInfo = await getAccountInfo(provider, tokenData.access_token);
 
-    // Save to database using UserManagementService
+    let savedAccountsCount = 0;
+    let accountNames: string[] = [];
+
+    // Save user account
     const savedAccount = await userManagementService.saveOAuthAccount(
       userEmail,
       provider,
@@ -131,12 +136,70 @@ async function handleOAuthCallback(
         access_token: tokenData.access_token,
         refresh_token: tokenData.refresh_token,
         expires_in: tokenData.expires_in,
-        account_info: accountInfo,
+        account_info: { ...accountInfo, tokenType: 'user_token' },
       }
     );
+    savedAccountsCount++;
+    accountNames.push(savedAccount.account_name);
+
+    // For Facebook, also fetch and save Pages
+    if (provider === 'facebook') {
+      console.log('📄 Fetching Facebook Pages...');
+      try {
+        const pagesResponse = await fetch(
+          `https://graph.facebook.com/v18.0/me/accounts?fields=id,name,category,access_token,tasks&access_token=${tokenData.access_token}`
+        );
+
+        if (pagesResponse.ok) {
+          const pagesData = await pagesResponse.json();
+          console.log('📊 Number of pages found:', pagesData.data?.length || 0);
+
+          if (pagesData.data && pagesData.data.length > 0) {
+            console.log('🔄 Starting to save pages...');
+            
+            for (const page of pagesData.data) {
+              try {
+                console.log(`📝 Saving page: ${page.name} (ID: ${page.id})`);
+                
+                await userManagementService.saveOAuthAccount(
+                  userEmail,
+                  'facebook_page',
+                  {
+                    access_token: page.access_token || tokenData.access_token,
+                    refresh_token: undefined,
+                    expires_in: undefined, // Page tokens don't expire
+                    account_info: {
+                      providerId: page.id,
+                      name: page.name,
+                      category: page.category,
+                      page: page,
+                      tokenType: 'page_token'
+                    }
+                  }
+                );
+                
+                savedAccountsCount++;
+                accountNames.push(page.name);
+                console.log(`✅ Saved page: ${page.name}`);
+              } catch (pageError) {
+                console.error(`❌ Error saving page ${page.id}:`, pageError);
+              }
+            }
+            
+            console.log(`✅ Total accounts saved: ${savedAccountsCount}`);
+          } else {
+            console.log('⚠️  No pages found for this user');
+          }
+        } else {
+          console.error('❌ Failed to fetch pages:', await pagesResponse.text());
+        }
+      } catch (pagesError) {
+        console.error('❌ Error fetching pages:', pagesError);
+      }
+    }
 
     return NextResponse.redirect(
-      `${baseUrl}/app?oauth_success=${provider}&accounts_saved=1&account=${encodeURIComponent(savedAccount.account_name)}`
+      `${baseUrl}/app?oauth_success=${provider}&accounts_saved=${savedAccountsCount}&account=${encodeURIComponent(accountNames.join(', '))}`
     );
   } catch (error) {
     console.error('OAuth callback error:', error);

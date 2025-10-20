@@ -92,9 +92,9 @@ export async function GET(request: NextRequest) {
 
     const profileData = await profileResponse.json();
 
-    // Get user pages
+    // Get user pages WITH their page access tokens
     const pagesResponse = await fetch(
-      `https://graph.facebook.com/v18.0/me/accounts?access_token=${access_token}`
+      `https://graph.facebook.com/v18.0/me/accounts?fields=id,name,category,access_token,tasks&access_token=${access_token}`
     );
 
     if (!pagesResponse.ok) {
@@ -105,6 +105,10 @@ export async function GET(request: NextRequest) {
     }
 
     const pagesData = await pagesResponse.json();
+    
+    // DEBUG: Log pages data
+    console.log('📄 Pages Response:', JSON.stringify(pagesData, null, 2));
+    console.log('📊 Number of pages:', pagesData.data?.length || 0);
 
     // Save Facebook account and pages to database
     const userEmail = session.user.email;
@@ -140,9 +144,13 @@ export async function GET(request: NextRequest) {
       savedAccountsCount++;
 
       // Save each Facebook Page as separate account
+      console.log('🔄 Starting to save pages...');
       for (const page of pagesData.data || []) {
         try {
-          await userManagement.saveOAuthAccount(
+          console.log(`📝 Saving page: ${page.name} (ID: ${page.id})`);
+          console.log(`🔑 Page has access_token: ${!!page.access_token}`);
+          
+          const result = await userManagement.saveOAuthAccount(
             userEmail!,
             'facebook_page',
             {
@@ -158,11 +166,14 @@ export async function GET(request: NextRequest) {
               }
             }
           );
+          console.log(`✅ Saved page ${page.name} successfully`);
           savedAccountsCount++;
         } catch (pageError) {
-          console.error(`Error saving page ${page.id}:`, pageError);
+          console.error(`❌ Error saving page ${page.id}:`, pageError);
+          console.error('Full error:', JSON.stringify(pageError, null, 2));
         }
       }
+      console.log(`✅ Total saved accounts: ${savedAccountsCount}`);
 
       console.log('Facebook OAuth success:', {
         userId: stateData.userId,

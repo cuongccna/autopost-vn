@@ -3,7 +3,7 @@ export const PROVIDERS = {
     label: 'Facebook Page', 
     tag: 'FB', 
     chip: 'bg-blue-100 text-blue-700',
-    apiKey: 'facebook'
+    apiKey: 'facebook_page'  // ← Changed: Use Page accounts, not User accounts
   },
   instagram: { 
     label: 'Instagram Biz', 

@@ -17,9 +17,11 @@ const PROVIDER_MAPPING = {
 const OAUTH_CONFIGS = {
   facebook: {
     baseUrl: 'https://www.facebook.com/v18.0/dialog/oauth',
-    // ✅ Phase 1: Basic permissions (available by default)
-    // Note: pages_* permissions require Facebook Login + Pages API setup
-    scope: 'public_profile,email',
+    // ✅ Full permissions for Facebook Pages posting
+    // Basic: public_profile, email (available by default)
+    // Pages: pages_show_list, pages_read_engagement (available in Development mode)
+    // Advanced: pages_manage_posts (requires App Review for Production)
+    scope: 'public_profile,email,pages_show_list,pages_read_engagement,pages_manage_posts',
     redirectUri: `${process.env.NEXTAUTH_URL}/api/auth/oauth/facebook/callback`
   },
   instagram: {

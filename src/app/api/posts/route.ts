@@ -105,7 +105,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const validProviders = ['facebook', 'instagram', 'zalo']
+    const validProviders = ['facebook', 'facebook_page', 'instagram', 'zalo']
     if (providers?.some((p: string) => !validProviders.includes(p))) {
       return NextResponse.json(
         { error: 'Invalid provider. Allowed: ' + validProviders.join(', ') },

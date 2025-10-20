@@ -836,6 +836,7 @@ export class ZaloPublisher extends BaseSocialPublisher {
 export function createPublisher(account: SocialAccount): BaseSocialPublisher {
   switch (account.provider) {
     case 'facebook':
+    case 'facebook_page': // 🔥 Facebook Pages use same publisher as Facebook
       return new FacebookPublisher(account);
     case 'instagram':
       return new InstagramPublisher(account);

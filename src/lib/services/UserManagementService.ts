@@ -25,7 +25,7 @@ export interface UserSocialAccount {
   id: string;
   user_email: string;
   workspace_id: string;
-  provider: 'facebook' | 'instagram' | 'zalo';
+  provider: 'facebook' | 'facebook_page' | 'instagram' | 'zalo';
   account_name: string;
   provider_account_id: string;
   access_token: string;
@@ -116,7 +116,7 @@ export class UserManagementService {
       id: account.id,
       user_email: userEmail,
       workspace_id: account.workspace_id,
-      provider: account.provider as 'facebook' | 'instagram' | 'zalo',
+      provider: account.provider as 'facebook' | 'facebook_page' | 'instagram' | 'zalo',
       account_name: account.name || account.username || 'Unknown',
       provider_account_id: account.provider_id,
       access_token: OAuthTokenManager.decryptForUse(account.token_encrypted || ''),
