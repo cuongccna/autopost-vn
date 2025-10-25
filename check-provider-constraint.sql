@@ -9,3 +9,4 @@ AND conrelid = 'public.autopostvn_social_accounts'::regclass;
 -- Also check what providers are currently allowed
 SELECT DISTINCT provider 
 FROM public.autopostvn_social_accounts;
+
