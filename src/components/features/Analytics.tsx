@@ -7,6 +7,7 @@ import ChannelStatsChart from '@/components/analytics/ChannelStatsChart';
 import TimeSlotAnalytics from '@/components/analytics/TimeSlotAnalytics';
 import ErrorAnalytics from '@/components/analytics/ErrorAnalytics';
 import EngagementTrendChart from '@/components/analytics/EngagementTrendChart';
+import { toast } from '@/lib/utils/toast';
 
 interface Post {
   id: string;
@@ -105,6 +106,49 @@ export default function Analytics({ posts, className = '' }: AnalyticsProps) {
     { id: 'timing', label: 'Thời gian' },
     { id: 'errors', label: 'Lỗi' }
   ];
+
+  const handleExportReport = () => {
+    try {
+      toast.info('Đang tạo báo cáo...');
+      
+      // Create report data
+      const reportData = {
+        generated_at: new Date().toISOString(),
+        period: periods.find(p => p.id === selectedPeriod)?.label,
+        summary: {
+          total_posts: analyticsData.summary?.total_posts || posts.length,
+          total_engagement: analyticsData.summary?.total_engagement || 0,
+          avg_engagement_rate: analyticsData.summary?.avg_engagement_rate || 0,
+          total_reach: analyticsData.summary?.total_reach || 0,
+          success_rate: publishedSchedules > 0 ? ((publishedSchedules / totalSchedules) * 100).toFixed(1) : 0,
+        },
+        posts: posts.map(post => ({
+          title: post.title,
+          scheduled_at: post.datetime,
+          platforms: post.providers.join(', '),
+          status: post.status,
+        })),
+        insights: analyticsData.insights.slice(0, 10), // Top 10
+        best_posting_times: analyticsData.best_posting_times.slice(0, 5), // Top 5
+      };
+
+      // Create and download JSON file
+      const blob = new Blob([JSON.stringify(reportData, null, 2)], { type: 'application/json' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `analytics-report-${Date.now()}.json`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+
+      toast.success('Đã xuất báo cáo thành công');
+    } catch (error) {
+      console.error('Export error:', error);
+      toast.error('Không thể xuất báo cáo');
+    }
+  };
 
   // Use real data from API if available, otherwise calculate from posts
   // Count total schedules (each post can be published to multiple platforms)
@@ -230,7 +274,10 @@ export default function Analytics({ posts, className = '' }: AnalyticsProps) {
               <option key={period.id} value={period.id}>{period.label}</option>
             ))}
           </select>
-          <button className="px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors">
+          <button 
+            onClick={handleExportReport}
+            className="px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors"
+          >
             Xuất báo cáo
           </button>
         </div>

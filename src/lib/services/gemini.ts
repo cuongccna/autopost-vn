@@ -1,4 +1,5 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { formatSocialContent } from '@/lib/utils/format-social-content';
 
 // Initialize Gemini AI with API key
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
@@ -76,13 +77,32 @@ ${targetAudience ? `- Đối tượng khách hàng: ${targetAudience}` : ''}
 - Sử dụng tiếng Việt
 - Phù hợp với thị trường Việt Nam
 
+**QUAN TRỌNG - Định dạng văn bản:**
+- KHÔNG sử dụng Markdown (không dùng **, __, ##, *, _, >, \`, etc.)
+- Sử dụng text thuần (plain text) với emoji và line breaks
+- Phần tiêu đề/heading: Viết HOA toàn bộ hoặc dùng emoji nổi bật
+- Nhấn mạnh: Dùng VIẾT HOA hoặc emoji thay vì bold/italic
+- Danh sách: Dùng emoji (✓, •, 👉, ➡️) thay vì dấu - hoặc *
+- Ngắt dòng: Sử dụng tự nhiên để dễ đọc
+
+**Ví dụ định dạng đúng:**
+🎉 KHUYẾN MÃI ĐẶC BIỆT
+
+Chào cả nhà! Hôm nay tớ có một món quà cực kỳ đặc biệt muốn chia sẻ với mọi người! 🎁
+
+✓ Giảm giá lên đến 50%
+✓ Freeship toàn quốc
+✓ Tặng kèm quà tặng giá trị
+
+Đừng bỏ lỡ cơ hội này nhé! 💝
+
 **Lưu ý đặc biệt:**
 - Tạo nội dung hấp dẫn, dễ đọc
-- Sử dụng emoji phù hợp
+- Sử dụng emoji phù hợp (nhưng đừng quá nhiều)
 - Có call-to-action rõ ràng
-- Hashtags trending và phù hợp
+- Hashtags trending và phù hợp (nếu phù hợp với platform)
 
-Trả về chỉ nội dung caption, không có giải thích thêm.
+Trả về chỉ nội dung caption dạng plain text, không có markdown, không có giải thích thêm.
 `;
 
   try {
@@ -92,9 +112,15 @@ Trả về chỉ nội dung caption, không có giải thích thêm.
     });
 
     const response = await result.response;
-    const text = response.text();
+    let text = response.text();
     
-    return text.trim();
+    // Clean up and format the text
+    text = text.trim();
+    
+    // Safety check: If AI still returns markdown, convert it
+    text = formatSocialContent(text, platform);
+    
+    return text;
   } catch (error) {
     console.error('Gemini caption generation error:', error);
     throw new Error('Không thể tạo caption. Vui lòng thử lại.');

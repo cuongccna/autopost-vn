@@ -77,6 +77,40 @@ function AppPageContent() {
     setLogs((prev: string[]) => [message, ...prev]);
   };
 
+  // Fetch workspace settings from API
+  const fetchSettings = async () => {
+    try {
+      const response = await fetch('/api/workspace/settings');
+      
+      if (!response.ok) {
+        console.warn('Failed to fetch settings, using defaults');
+        return;
+      }
+
+      const data = await response.json();
+      
+      // Convert API settings to UI format (FIXED: use data.settings path)
+      const loadedSettings = {
+        notifySuccess: data.settings?.notifications?.onSuccess ?? true,
+        notifyFail: data.settings?.notifications?.onFailure ?? true,
+        notifyToken: data.settings?.notifications?.onTokenExpiry ?? true,
+        timezone: data.settings?.scheduling?.timezone ?? 'Asia/Ho_Chi_Minh',
+        golden: data.settings?.scheduling?.goldenHours ?? ['09:00', '12:30', '20:00'],
+        rateLimit: data.settings?.scheduling?.rateLimit ?? 10,
+        autoDelete: data.settings?.advanced?.autoDeleteOldPosts ?? false,
+        autoDeleteDays: data.settings?.advanced?.autoDeleteDays ?? 30,
+        testMode: data.settings?.advanced?.testMode ?? false,
+      };
+      
+      setSettings(loadedSettings);
+      console.log('✅ Loaded settings from API:', loadedSettings);
+      
+    } catch (error) {
+      console.error('Error fetching settings:', error);
+      // Keep default settings on error
+    }
+  };
+
   // Fetch posts from API on component mount
   useEffect(() => {
     const fetchPosts = async () => {
@@ -115,6 +149,8 @@ function AppPageContent() {
       }
     };
 
+    // Load settings first, then posts
+    fetchSettings();
     fetchPosts();
   }, []);
 
@@ -683,34 +719,71 @@ function AppPageContent() {
   };
 
   const handleSaveSettings = async (newSettings: typeof settings) => {
-    // Detect changes
-    const changes: Record<string, any> = {};
-    Object.keys(newSettings).forEach(key => {
-      if (newSettings[key as keyof typeof settings] !== settings[key as keyof typeof settings]) {
-        changes[key] = {
-          from: settings[key as keyof typeof settings],
-          to: newSettings[key as keyof typeof settings]
-        };
-      }
-    });
+    try {
+      // Detect changes
+      const changes: Record<string, any> = {};
+      Object.keys(newSettings).forEach(key => {
+        if (newSettings[key as keyof typeof settings] !== settings[key as keyof typeof settings]) {
+          changes[key] = {
+            from: settings[key as keyof typeof settings],
+            to: newSettings[key as keyof typeof settings]
+          };
+        }
+      });
 
-    setSettings(newSettings);
-    
-    // Log settings update
-    logWorkspaceAction('settings_updated', {
-      changes: Object.keys(changes),
-      settings_data: changes
-    }, 'success').catch(console.error);
-    
-    // Refresh activity logs after successful action
-    setTimeout(() => {
-      refreshActivityLogs();
-    }, 500);
-    
-    const now = new Date();
-    const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    setLogs((prev: string[]) => [`✔️ ${timeStr} — Lưu cài đặt thành công`, ...prev]);
-    toast.success('Đã lưu cài đặt thành công!');
+      // Convert UI settings to API format
+      const apiSettings = {
+        notifications: {
+          success: newSettings.notifySuccess,
+          failure: newSettings.notifyFail,
+          tokenExpiry: newSettings.notifyToken,
+        },
+        scheduling: {
+          timezone: newSettings.timezone,
+          goldenHours: newSettings.golden,
+          rateLimit: newSettings.rateLimit,
+        },
+        advanced: {
+          autoDeleteOldPosts: newSettings.autoDelete,
+          autoDeleteAfterDays: newSettings.autoDeleteDays,
+          testMode: newSettings.testMode,
+        },
+      };
+
+      // Save to API
+      const response = await fetch('/api/workspace/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(apiSettings),
+      });
+
+      if (!response.ok) {
+        const error = await response.text();
+        throw new Error(`Failed to save settings: ${error}`);
+      }
+
+      // Reload settings from API to ensure consistency
+      await fetchSettings();
+
+      // Log settings update
+      logWorkspaceAction('settings_updated', {
+        changes: Object.keys(changes),
+        settings_data: changes
+      }, 'success').catch(console.error);
+      
+      // Refresh activity logs after successful action
+      setTimeout(() => {
+        refreshActivityLogs();
+      }, 500);
+      
+      const now = new Date();
+      const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      setLogs((prev: string[]) => [`✔️ ${timeStr} — Lưu cài đặt thành công`, ...prev]);
+      toast.success('Đã lưu cài đặt thành công!');
+    } catch (error) {
+      console.error('Error saving settings:', error);
+      toast.error('Lỗi khi lưu cài đặt');
+    }
   };
 
   const handleResetSettings = () => {

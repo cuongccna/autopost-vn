@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { usePermissions } from '@/hooks/usePermissions';
 import { 
@@ -41,6 +41,33 @@ export const UserProfileSettings: React.FC<UserProfileSettingsProps> = ({ onClos
     newPassword: '',
     confirmPassword: ''
   });
+
+  // Load user profile data from database
+  useEffect(() => {
+    const loadProfile = async () => {
+      if (!session?.user) return;
+
+      try {
+        const response = await fetch('/api/user/profile');
+        if (response.ok) {
+          const data = await response.json();
+          console.log('📥 Loaded user profile from database:', data);
+          
+          setProfileData({
+            fullName: data.user?.full_name || session?.user?.name || '',
+            email: data.user?.email || session?.user?.email || '',
+            phone: data.user?.phone || '',
+            avatar: data.user?.avatar_url || session?.user?.image || ''
+          });
+        }
+      } catch (error) {
+        console.error('Error loading profile:', error);
+        // Keep default values from session
+      }
+    };
+
+    loadProfile();
+  }, [session]);
 
   const handleProfileUpdate = async () => {
     setLoading(true);

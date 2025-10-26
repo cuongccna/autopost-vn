@@ -1,12 +1,61 @@
-import Link from 'next/link'
-import { Metadata } from 'next'
+'use client';
 
-export const metadata: Metadata = {
-  title: 'Bảng giá - AutoPost VN',
-  description: 'Lựa chọn gói dịch vụ phù hợp với nhu cầu của bạn. Từ miễn phí đến enterprise với nhiều tính năng mạnh mẽ.',
-}
+import Link from 'next/link'
+import { useState } from 'react';
+import PaymentModal from '@/components/modals/PaymentModal';
+import { showToast } from '@/lib/utils/toast';
 
 export default function PricingPage() {
+  const [paymentModal, setPaymentModal] = useState<{
+    isOpen: boolean;
+    plan: { name: string; price: string; type: 'professional' | 'enterprise' } | null;
+  }>({
+    isOpen: false,
+    plan: null
+  });
+
+  const handleUpgradeClick = (planType: 'professional' | 'enterprise', planName: string, planPrice: string) => {
+    setPaymentModal({
+      isOpen: true,
+      plan: { name: planName, price: planPrice, type: planType }
+    });
+  };
+
+  const handleRequestUpgrade = async (planType: 'professional' | 'enterprise') => {
+    try {
+      const response = await fetch('/api/upgrade-request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ targetPlan: planType })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        // Show user-friendly error messages
+        if (response.status === 401) {
+          showToast.error('Vui lòng đăng nhập để nâng cấp tài khoản');
+          // Redirect to login after 2 seconds
+          setTimeout(() => {
+            window.location.href = '/app';
+          }, 2000);
+        } else if (response.status === 404) {
+          showToast.error('Không tìm thấy thông tin tài khoản. Vui lòng liên hệ admin.');
+        } else if (data.error?.includes('already on this plan')) {
+          showToast.warning('Bạn đã sở hữu gói này hoặc cao hơn rồi!');
+        } else {
+          showToast.error(data.error || 'Gửi yêu cầu thất bại. Vui lòng thử lại.');
+        }
+        throw new Error(data.error || 'Upgrade request failed');
+      }
+
+      return data;
+    } catch (error: any) {
+      console.error('Upgrade request error:', error);
+      throw error;
+    }
+  };
+
   const plans = [
     {
       name: 'Starter',
@@ -28,7 +77,8 @@ export default function PricingPage() {
         'Không có API access'
       ],
       cta: 'Bắt đầu miễn phí',
-      ctaLink: '/app'
+      ctaLink: '/app',
+      planType: 'free'
     },
     {
       name: 'Professional',
@@ -51,7 +101,8 @@ export default function PricingPage() {
       ],
       limitations: [],
       cta: 'Chọn Professional',
-      ctaLink: '/app'
+      ctaLink: '#upgrade',
+      planType: 'professional'
     },
     {
       name: 'Enterprise',
@@ -75,7 +126,8 @@ export default function PricingPage() {
       ],
       limitations: [],
       cta: 'Liên hệ tư vấn',
-      ctaLink: '/support'
+      ctaLink: '#upgrade',
+      planType: 'enterprise'
     }
   ]
 
@@ -192,16 +244,29 @@ export default function PricingPage() {
                   ))}
                 </div>
 
-                <Link 
-                  href={plan.ctaLink}
-                  className={`block w-full text-center py-3 px-6 rounded-lg font-semibold transition-all duration-300 ${
-                    plan.popular
-                      ? 'bg-white text-blue-600 hover:bg-gray-100'
-                      : 'bg-blue-600 text-white hover:bg-blue-700'
-                  }`}
-                >
-                  {plan.cta}
-                </Link>
+                {plan.planType === 'free' ? (
+                  <Link 
+                    href={plan.ctaLink}
+                    className={`block w-full text-center py-3 px-6 rounded-lg font-semibold transition-all duration-300 ${
+                      plan.popular
+                        ? 'bg-white text-blue-600 hover:bg-gray-100'
+                        : 'bg-blue-600 text-white hover:bg-blue-700'
+                    }`}
+                  >
+                    {plan.cta}
+                  </Link>
+                ) : (
+                  <button 
+                    onClick={() => handleUpgradeClick(plan.planType as 'professional' | 'enterprise', plan.name, plan.price)}
+                    className={`block w-full text-center py-3 px-6 rounded-lg font-semibold transition-all duration-300 ${
+                      plan.popular
+                        ? 'bg-white text-blue-600 hover:bg-gray-100'
+                        : 'bg-blue-600 text-white hover:bg-blue-700'
+                    }`}
+                  >
+                    {plan.cta}
+                  </button>
+                )}
               </div>
             ))}
           </div>
@@ -302,6 +367,16 @@ export default function PricingPage() {
           </div>
         </div>
       </section>
+
+      {/* Payment Modal */}
+      {paymentModal.plan && (
+        <PaymentModal
+          isOpen={paymentModal.isOpen}
+          onClose={() => setPaymentModal({ isOpen: false, plan: null })}
+          plan={paymentModal.plan}
+          onRequestUpgrade={handleRequestUpgrade}
+        />
+      )}
     </div>
   )
 }
