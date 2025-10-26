@@ -36,9 +36,14 @@ export function useActivityLogger() {
   };
 
   const logWorkspaceAction = async (action: string, data: any, status: 'success' | 'failed' = 'success', error?: string) => {
+    // Get workspace ID from localStorage or use null
+    const workspaceId = typeof window !== 'undefined' 
+      ? localStorage.getItem('current_workspace_id') 
+      : null;
+    
     await logActivity(action, 'workspace', {
       target_resource_type: 'workspace',
-      target_resource_id: 'main-workspace',
+      target_resource_id: workspaceId || undefined, // Let API handle null/undefined
       description: getWorkspaceActionDescription(action, data),
       status,
       error_message: error,

@@ -3,8 +3,8 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 // Initialize Gemini AI with API key
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
-// Use Gemini 1.5 Flash-8B model for cost efficiency
-const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash-8b' });
+// Use Gemini 2.0 Flash-Lite for lowest cost ($0.075 input, $0.30 output per 1M tokens)
+const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-lite' });
 
 export interface GeminiConfig {
   temperature?: number;

@@ -6,14 +6,21 @@
 import crypto from 'crypto';
 
 class TokenEncryptionService {
-  private encryptionKey: string;
+  private encryptionKey: Buffer;
   private algorithm = 'aes-256-gcm';
 
   constructor() {
-    this.encryptionKey = process.env.ENCRYPTION_KEY || this.generateFallbackKey();
+    const keyHex = process.env.ENCRYPTION_KEY || this.generateFallbackKey();
     
-    if (this.encryptionKey.length !== 32) {
-      throw new Error('ENCRYPTION_KEY must be 32 characters long for AES-256');
+    // Support both hex (64 chars) and string (32 chars) formats
+    if (keyHex.length === 64) {
+      // Hex format (recommended)
+      this.encryptionKey = Buffer.from(keyHex, 'hex');
+    } else if (keyHex.length === 32) {
+      // Legacy string format
+      this.encryptionKey = Buffer.from(keyHex, 'utf8');
+    } else {
+      throw new Error('ENCRYPTION_KEY must be 64 hex characters or 32 string characters for AES-256');
     }
   }
 
@@ -22,7 +29,8 @@ class TokenEncryptionService {
    */
   private generateFallbackKey(): string {
     console.warn('⚠️ Using fallback encryption key. Set ENCRYPTION_KEY in production!');
-    return 'dev-key-not-secure-for-production!'; // 32 chars
+    // Generate 32 bytes = 64 hex chars
+    return crypto.randomBytes(32).toString('hex');
   }
 
   /**

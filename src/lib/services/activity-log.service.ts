@@ -35,14 +35,21 @@ export class ActivityLogService {
         logData.additional_data || {}
       );
       
+      // Validate UUID format for workspace_id and target_resource_id
+      const isValidUUID = (str: string | undefined) => {
+        if (!str) return false;
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        return uuidRegex.test(str);
+      };
+      
       const insertData = {
         user_id: userId,
-        workspace_id: logData.workspace_id,
+        workspace_id: isValidUUID(logData.workspace_id) ? logData.workspace_id : null,
         action_type: logData.action_type,
         action_category: logData.action_category,
         description,
         target_resource_type: logData.target_resource_type,
-        target_resource_id: logData.target_resource_id,
+        target_resource_id: isValidUUID(logData.target_resource_id) ? logData.target_resource_id : null,
         previous_data: logData.previous_data || {},
         new_data: logData.new_data || {},
         ip_address: context?.ipAddress,

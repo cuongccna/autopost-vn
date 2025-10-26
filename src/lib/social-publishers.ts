@@ -1,5 +1,7 @@
 import { sbServer } from '@/lib/supabase/server';
 import { OAuthTokenManager } from '@/lib/services/TokenEncryptionService';
+import { withRateLimit, checkRateLimit } from '@/lib/utils/rateLimiter';
+import logger, { loggers } from '@/lib/utils/logger';
 
 export interface PublishResult {
   success: boolean;
@@ -22,6 +24,7 @@ export interface SocialAccount {
   name: string;
   token_encrypted: string;
   provider_id: string;
+  workspace_id?: string;
   metadata?: any;
 }
 
@@ -105,17 +108,46 @@ export class FacebookPublisher extends BaseSocialPublisher {
     try {
       const accessToken = this.decryptToken(this.account.token_encrypted);
       const pageId = this.account.provider_id;
+      const userId = this.account.workspace_id || this.account.id; // Use workspace_id or fallback to account id
 
-      console.log('🔵 Facebook Publisher - Starting publish process:', {
+      logger.info('Facebook Publisher - Starting publish process', {
         pageId,
         hasMedia: data.mediaUrls && data.mediaUrls.length > 0,
-        isScheduled: !!data.scheduledAt
+        isScheduled: !!data.scheduledAt,
+        userId
+      });
+
+      // Check rate limit before proceeding
+      const rateLimitCheck = await checkRateLimit('facebook', userId);
+      if (!rateLimitCheck.allowed) {
+        const errorMsg = `Rate limit exceeded. ${rateLimitCheck.remaining} requests remaining. Resets at ${rateLimitCheck.resetAt.toISOString()}`;
+        logger.warn('Facebook rate limit exceeded', {
+          userId,
+          resetAt: rateLimitCheck.resetAt,
+          retryAfter: rateLimitCheck.retryAfter
+        });
+        
+        return {
+          success: false,
+          error: errorMsg,
+          metadata: {
+            rateLimitExceeded: true,
+            resetAt: rateLimitCheck.resetAt,
+            retryAfter: rateLimitCheck.retryAfter
+          }
+        };
+      }
+
+      // Log remaining rate limit
+      logger.debug('Facebook rate limit check passed', {
+        remaining: rateLimitCheck.remaining,
+        resetAt: rateLimitCheck.resetAt
       });
 
       // Handle media upload first if present
       let uploadedMediaIds: string[] = [];
       if (data.mediaUrls && data.mediaUrls.length > 0) {
-        console.log('📸 Uploading media to Facebook...');
+        logger.info('Uploading media to Facebook', { count: data.mediaUrls.length });
         // Limit concurrent uploads to 3
         const concurrency = 3;
         let index = 0;

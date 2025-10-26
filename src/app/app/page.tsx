@@ -65,6 +65,9 @@ function AppPageContent() {
     timezone: 'Asia/Ho_Chi_Minh',
     golden: ['09:00', '12:30', '20:00'],
     rateLimit: 10,
+    autoDelete: false,
+    autoDeleteDays: 30,
+    testMode: false,
   });
   const [isLoading, setIsLoading] = useState(true);
   const { toasts, toast, removeToast } = useToast();
@@ -718,6 +721,9 @@ function AppPageContent() {
       timezone: 'Asia/Ho_Chi_Minh',
       golden: ['09:00', '12:30', '20:00'],
       rateLimit: 10,
+      autoDelete: false,
+      autoDeleteDays: 30,
+      testMode: false,
     };
     setSettings(defaultSettings);
     const now = new Date();

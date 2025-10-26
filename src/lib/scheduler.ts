@@ -1,6 +1,8 @@
 import { sbServer } from '@/lib/supabase/server';
 import { validatePostForPublishing, logValidationActivity, ValidationResult } from '@/lib/post-validation';
 import { createPublisher, logPublishActivity, PublishResult, PublishData } from '@/lib/social-publishers';
+import { WorkspaceSettingsService } from '@/lib/services/workspace-settings.service';
+import logger from '@/lib/utils/logger';
 
 interface ScheduleJob {
   id: string;
@@ -126,6 +128,46 @@ export async function runScheduler(limit = 10): Promise<ProcessingResult> {
             scheduleId: job.id,
             postId: job.post_id,
             status: 'failed',
+            message: errorMessage
+          });
+          continue;
+        }
+
+        // Bước 2.5: Check workspace settings
+        const workspaceId = validation.data!.post.workspace_id;
+        const settings = await WorkspaceSettingsService.getSettings(workspaceId);
+        
+        // Check if test mode is enabled
+        if (settings.advanced.testMode) {
+          console.log(`🧪 [SCHEDULER] Test mode enabled - simulating publish for job ${job.id}`);
+          await updateJobStatus(job.id, 'published', 'Test mode: Simulated publish', 'test_' + job.id);
+          result.successful++;
+          result.details.push({
+            scheduleId: job.id,
+            postId: job.post_id,
+            status: 'success',
+            message: `Test mode: Simulated publish to ${socialAccount.provider}`
+          });
+          continue;
+        }
+        
+        // Check rate limit
+        const rateLimit = await WorkspaceSettingsService.checkRateLimit(workspaceId, settings);
+        if (!rateLimit.allowed) {
+          const errorMessage = `Rate limit exceeded: ${rateLimit.current}/${rateLimit.limit} posts/hour`;
+          console.log(`⏸️ [SCHEDULER] ${errorMessage}`);
+          
+          // Reset status to pending for later retry
+          await sb
+            .from('autopostvn_post_schedules')
+            .update({ status: 'pending', updated_at: new Date().toISOString() })
+            .eq('id', job.id);
+          
+          result.skipped++;
+          result.details.push({
+            scheduleId: job.id,
+            postId: job.post_id,
+            status: 'skipped',
             message: errorMessage
           });
           continue;

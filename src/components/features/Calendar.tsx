@@ -162,9 +162,9 @@ function DraggablePost({ post, onClick }: DraggablePostProps) {
         
         {/* Providers icons */}
         <div className="flex gap-0.5">
-          {post.providers.slice(0, 3).map(provider => (
+          {post.providers.slice(0, 3).map((provider, index) => (
             <span
-              key={provider}
+              key={`${post.id}-${provider}-${index}`}
               className="text-xs"
               title={PROVIDERS[provider as keyof typeof PROVIDERS]?.label || provider}
             >

@@ -15,9 +15,23 @@ export async function GET(_request: NextRequest) {
     }
 
     const supabase = sbServer()
+    
+    // Fetch posts with their schedules and social accounts to get providers
     const { data: posts, error } = await supabase
       .from('autopostvn_posts')
-      .select('*')
+      .select(`
+        *,
+        autopostvn_post_schedules (
+          id,
+          status,
+          scheduled_at,
+          published_at,
+          social_account_id,
+          autopostvn_social_accounts (
+            provider
+          )
+        )
+      `)
       .eq('user_id', (session.user as any).id)
       .order('created_at', { ascending: false })
 
@@ -29,7 +43,65 @@ export async function GET(_request: NextRequest) {
       )
     }
 
-    return NextResponse.json({ posts })
+    // Transform posts to include providers array and aggregate status
+    const transformedPosts = (posts || []).map((post: any) => {
+      const schedules = post.autopostvn_post_schedules || [];
+      
+      // Get unique platforms from social accounts
+      const uniqueProviders = [...new Set(schedules.map((s: any) => {
+        const provider = s.autopostvn_social_accounts?.provider || '';
+        // Map platform names to match UI expectations
+        if (provider === 'facebook_page') return 'facebook';
+        if (provider === 'instagram_business') return 'instagram';
+        if (provider === 'facebook') return 'facebook';
+        return provider;
+      }).filter(Boolean))];  // Remove empty strings
+      
+      // Get all providers (with duplicates for counting schedules)
+      const allProviders = schedules.map((s: any) => {
+        const provider = s.autopostvn_social_accounts?.provider || '';
+        if (provider === 'facebook_page') return 'facebook';
+        if (provider === 'instagram_business') return 'instagram';
+        if (provider === 'facebook') return 'facebook';
+        return provider;
+      }).filter(Boolean);
+      
+      // Return both unique providers (for display) and schedule counts
+      const providers = allProviders; // Keep all for Analytics calculation
+      const schedules_count = schedules.length;
+      
+      // Determine overall status
+      let status = 'draft';
+      if (schedules.length > 0) {
+        const allPublished = schedules.every((s: any) => s.status === 'published');
+        const anyFailed = schedules.some((s: any) => s.status === 'failed');
+        const anyScheduled = schedules.some((s: any) => s.status === 'scheduled');
+        
+        if (allPublished) status = 'published';
+        else if (anyFailed) status = 'failed';
+        else if (anyScheduled) status = 'scheduled';
+      }
+      
+      // Use the earliest scheduled_at or published_at
+      const scheduledAt = schedules.length > 0 
+        ? schedules.reduce((earliest: any, s: any) => {
+            const date = s.published_at || s.scheduled_at;
+            return !earliest || (date && new Date(date) < new Date(earliest)) ? date : earliest;
+          }, null)
+        : null;
+
+      return {
+        ...post,
+        providers,
+        schedules_count,
+        status,
+        scheduled_at: scheduledAt || post.created_at,
+        // Remove the nested schedules from response
+        autopostvn_post_schedules: undefined
+      };
+    });
+
+    return NextResponse.json({ posts: transformedPosts })
   } catch (error) {
     console.error('Posts GET error:', error)
     return NextResponse.json(

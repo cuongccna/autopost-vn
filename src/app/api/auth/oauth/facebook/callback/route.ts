@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { UserManagementService } from '@/lib/services/UserManagementService';
+import logger, { loggers } from '@/lib/utils/logger';
 
 /**
  * Facebook OAuth Callback Handler
@@ -9,16 +10,28 @@ import { UserManagementService } from '@/lib/services/UserManagementService';
  */
 
 export async function GET(request: NextRequest) {
+  const startTime = Date.now();
+  let userId: string | undefined;
+  
   try {
     const session = await getServerSession(authOptions);
+    userId = (session?.user as any)?.id;
+    
     const url = new URL(request.url);
     const code = url.searchParams.get('code');
     const state = url.searchParams.get('state');
     const error = url.searchParams.get('error');
 
+    logger.info('Facebook OAuth callback received', {
+      hasCode: !!code,
+      hasState: !!state,
+      hasError: !!error,
+      userId
+    });
+
     // Handle OAuth errors
     if (error) {
-      console.error('Facebook OAuth error:', error);
+      loggers.oauthConnect('facebook', userId || 'unknown', false, error);
       return NextResponse.redirect(
         `${process.env.NEXTAUTH_URL}/app?oauth_error=${encodeURIComponent(error)}`
       );
@@ -26,6 +39,7 @@ export async function GET(request: NextRequest) {
 
     // Validate state and session
     if (!state || !session?.user) {
+      loggers.oauthConnect('facebook', userId || 'unknown', false, 'invalid_state');
       return NextResponse.redirect(
         `${process.env.NEXTAUTH_URL}/app?oauth_error=invalid_state`
       );
