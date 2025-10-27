@@ -179,6 +179,7 @@ export async function runScheduler(limit = 10): Promise<ProcessingResult> {
         const publishData: PublishData = {
           content: validation.data!.post.content,
           mediaUrls: validation.data!.post.media_urls || [],
+          mediaType: validation.data!.post.media_type || 'none',
           metadata: validation.data!.post.metadata || {}
         };
 

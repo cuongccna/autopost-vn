@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { PROVIDERS } from '@/lib/constants';
-import ImageUpload from '@/components/ui/ImageUpload';
+import MediaUploader, { UploadedMedia } from '@/components/ui/MediaUploader';
 import ContentEditor from '@/components/ui/ContentEditor';
 import TemplateLibrary from '@/components/ui/TemplateLibrary';
 
@@ -16,6 +16,7 @@ interface Post {
   content?: string;
   error?: string;
   mediaUrls?: string[];
+  mediaType?: 'image' | 'video' | 'album' | 'none';
 }
 
 interface UploadedImage {
@@ -35,6 +36,7 @@ interface ComposeModalProps {
     channels: string[];
     scheduleAt: string;
     mediaUrls: string[];
+    mediaType?: 'image' | 'video' | 'album' | 'none';
     postId?: string; // For editing existing posts
   }) => void;
   goldenHours?: string[];
@@ -49,7 +51,7 @@ export default function ComposeModal({ isOpen, onClose, onSubmit, goldenHours: c
   const [content, setContent] = useState('');
   const [scheduleAt, setScheduleAt] = useState('');
   const [selectedChannels, setSelectedChannels] = useState<Set<string>>(new Set(['facebook', 'instagram']));
-  const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([]);
+  const [uploadedMedia, setUploadedMedia] = useState<UploadedMedia[]>([]);
   const [showTemplateLibrary, setShowTemplateLibrary] = useState(false);
   
   const hours = customGoldenHours || goldenHours;
@@ -92,16 +94,18 @@ export default function ComposeModal({ isOpen, onClose, onSubmit, goldenHours: c
         setScheduleAt(formatted);
       }
       
-      // Set existing images if any
+      // Set existing media if any
       if (editingPost.mediaUrls && editingPost.mediaUrls.length > 0) {
-        const existingImages = editingPost.mediaUrls.map((url, index) => ({
-          id: `existing-${index}`,
-          file: new File([], `existing-image-${index}`), // Dummy file
-          publicUrl: url,
+        const existingMedia = editingPost.mediaUrls.map((url, index) => ({
+          name: `existing-${index}`,
+          type: editingPost.mediaType === 'video' ? 'video/mp4' : 'image/jpeg',
+          size: 0,
+          url: url,
           path: url,
-          uploading: false
+          bucket: 'post-images',
+          mediaType: (editingPost.mediaType === 'video' ? 'video' : 'image') as 'image' | 'video',
         }));
-        setUploadedImages(existingImages);
+        setUploadedMedia(existingMedia);
       }
     }
   }, [editingPost]);
@@ -130,16 +134,30 @@ export default function ComposeModal({ isOpen, onClose, onSubmit, goldenHours: c
   const handleSubmit = () => {
     if (!content.trim()) return;
     
-    // Get URLs of successfully uploaded images
-    const mediaUrls = uploadedImages
-      .filter(img => !img.uploading && !img.error && img.publicUrl)
-      .map(img => img.publicUrl);
+    // Get URLs of successfully uploaded media
+    const mediaUrls = uploadedMedia.map(m => m.url);
+    
+    // Determine media type
+    let mediaType: 'image' | 'video' | 'album' | 'none' = 'none';
+    if (uploadedMedia.length > 0) {
+      const hasVideo = uploadedMedia.some(m => m.mediaType === 'video');
+      const hasImage = uploadedMedia.some(m => m.mediaType === 'image');
+      
+      if (hasVideo) {
+        mediaType = 'video';
+      } else if (uploadedMedia.length > 1) {
+        mediaType = 'album';
+      } else if (hasImage) {
+        mediaType = 'image';
+      }
+    }
     
     onSubmit({
       content: content.trim(),
       channels: Array.from(selectedChannels),
       scheduleAt: scheduleAt || new Date().toISOString(),
       mediaUrls,
+      mediaType,
       postId: editingPost?.id, // Include postId when editing
     });
     
@@ -147,7 +165,7 @@ export default function ComposeModal({ isOpen, onClose, onSubmit, goldenHours: c
     setContent('');
     setScheduleAt('');
     setSelectedChannels(new Set(['facebook', 'instagram']));
-    setUploadedImages([]);
+    setUploadedMedia([]);
     onClose();
   };
 
@@ -192,15 +210,14 @@ export default function ComposeModal({ isOpen, onClose, onSubmit, goldenHours: c
               maxLength={2000}
             />
             
-            {/* Image Upload Component */}
-            {session?.user && (
-              <ImageUpload
-                userId={(session.user as any).id || 'demo-user'}
-                maxImages={4}
-                onImagesChange={setUploadedImages}
-                className="mt-3"
-              />
-            )}
+            {/* Media Upload Component - Support images and videos */}
+            <MediaUploader
+              onMediaChange={setUploadedMedia}
+              maxFiles={10}
+              acceptImages={true}
+              acceptVideos={true}
+              className="mt-3"
+            />
           </div>
           
           <div className="space-y-4">

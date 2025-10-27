@@ -19,6 +19,7 @@ interface ComposeData {
   channels: string[];
   scheduleAt: string;
   mediaUrls: string[];
+  mediaType?: 'image' | 'video' | 'album' | 'none';
   postId?: string;
   metadata?: {
     type?: 'social' | 'video';
@@ -147,6 +148,7 @@ export default function ComposePage() {
         // Normalize to UTC ISO string to avoid timezone drift
         scheduled_at: data.scheduleAt ? new Date(data.scheduleAt).toISOString() : null,
         media_urls: data.mediaUrls || [],
+        media_type: data.mediaType || 'none',
         metadata: data.metadata || {}
       };
 

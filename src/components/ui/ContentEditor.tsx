@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef } from 'react';
+import { Bold, Italic, Smile } from 'lucide-react';
 
 interface ContentEditorProps {
   value: string;
@@ -9,32 +10,26 @@ interface ContentEditorProps {
   maxLength?: number;
 }
 
-const FORMATTING_TOOLS = [
-  { 
-    id: 'bold', 
-    icon: '𝐁', 
-    label: 'Đậm',
-    wrap: (text: string) => `**${text}**`
-  },
-  { 
-    id: 'italic', 
-    icon: '𝐼', 
-    label: 'Nghiêng',
-    wrap: (text: string) => `*${text}*`
-  },
-  { 
-    id: 'underline', 
-    icon: '𝐔', 
-    label: 'Gạch chân',
-    wrap: (text: string) => `__${text}__`
-  },
-  { 
-    id: 'strikethrough', 
-    icon: '𝐒', 
-    label: 'Gạch ngang',
-    wrap: (text: string) => `~~${text}~~`
-  }
-];
+// Unicode bold mapping - Facebook-friendly formatting
+const BOLD_MAP: { [key: string]: string } = {
+  'a': '𝗮', 'b': '𝗯', 'c': '𝗰', 'd': '𝗱', 'e': '𝗲', 'f': '𝗳', 'g': '𝗴', 'h': '𝗵', 'i': '�',
+  'j': '𝗷', 'k': '𝗸', 'l': '𝗹', 'm': '𝗺', 'n': '𝗻', 'o': '𝗼', 'p': '𝗽', 'q': '𝗾', 'r': '𝗿',
+  's': '𝘀', 't': '𝘁', 'u': '𝘂', 'v': '𝘃', 'w': '𝘄', 'x': '𝘅', 'y': '𝘆', 'z': '𝘇',
+  'A': '𝗔', 'B': '𝗕', 'C': '𝗖', 'D': '𝗗', 'E': '𝗘', 'F': '𝗙', 'G': '𝗚', 'H': '𝗛', 'I': '𝗜',
+  'J': '𝗝', 'K': '𝗞', 'L': '𝗟', 'M': '𝗠', 'N': '𝗡', 'O': '𝗢', 'P': '𝗣', 'Q': '𝗤', 'R': '𝗥',
+  'S': '𝗦', 'T': '𝗧', 'U': '𝗨', 'V': '𝗩', 'W': '𝗪', 'X': '𝗫', 'Y': '𝗬', 'Z': '𝗭',
+  '0': '𝟬', '1': '𝟭', '2': '𝟮', '3': '𝟯', '4': '�', '5': '𝟱', '6': '𝟲', '7': '𝟳', '8': '𝟴', '9': '𝟵'
+};
+
+// Unicode italic mapping
+const ITALIC_MAP: { [key: string]: string } = {
+  'a': '𝘢', 'b': '𝘣', 'c': '𝘤', 'd': '𝘥', 'e': '𝘦', 'f': '𝘧', 'g': '𝘨', 'h': '�', 'i': '𝘪',
+  'j': '𝘫', 'k': '𝘬', 'l': '𝘭', 'm': '𝘮', 'n': '𝘯', 'o': '𝘰', 'p': '𝘱', 'q': '𝘲', 'r': '𝘳',
+  's': '𝘴', 't': '𝘵', 'u': '𝘶', 'v': '𝘷', 'w': '𝘸', 'x': '𝘹', 'y': '𝘺', 'z': '𝘻',
+  'A': '𝘈', 'B': '𝘉', 'C': '𝘊', 'D': '𝘋', 'E': '𝘌', 'F': '𝘍', 'G': '𝘎', 'H': '𝘏', 'I': '𝘐',
+  'J': '𝘑', 'K': '�', 'L': '𝘓', 'M': '𝘔', 'N': '𝘕', 'O': '𝘖', 'P': '𝘗', 'Q': '𝘘', 'R': '𝘙',
+  'S': '𝘚', 'T': '𝘛', 'U': '𝘜', 'V': '𝘝', 'W': '𝘞', 'X': '𝘟', 'Y': '𝘠', 'Z': '𝘡'
+};
 
 const EMOJI_CATEGORIES = {
   'Cảm xúc': ['😀', '😃', '😄', '😁', '😆', '😅', '😂', '🤣', '😊', '😇', '🙂', '🙃', '😉', '😌', '😍', '🥰', '😘', '😗', '😙', '😚', '😋', '😛', '😝', '😜', '🤪', '🤨', '🧐', '🤓', '😎', '🤩', '🥳'],
@@ -43,41 +38,13 @@ const EMOJI_CATEGORIES = {
   'Xu hướng': ['🔥', '💯', '✨', '⭐', '🌟', '💫', '⚡', '☄️', '💥', '🔆', '🔅', '☀️', '🌤️', '⛅', '🌦️', '🌧️', '⛈️', '🌩️', '🌨️', '❄️', '☃️', '⛄', '🌬️', '💨', '🌪️', '🌈', '☔', '💧', '💦', '🌊']
 };
 
-const HEADING_STYLES = [
-  { id: 'h1', label: 'Tiêu đề lớn', prefix: '# ' },
-  { id: 'h2', label: 'Tiêu đề vừa', prefix: '## ' },
-  { id: 'h3', label: 'Tiêu đề nhỏ', prefix: '### ' },
-  { id: 'quote', label: 'Trích dẫn', prefix: '> ' },
-  { id: 'list', label: 'Danh sách', prefix: '• ' }
-];
-
 export default function ContentEditor({ value, onChange, placeholder, maxLength = 2000 }: ContentEditorProps) {
   const [showEmojis, setShowEmojis] = useState(false);
   const [activeEmojiCategory, setActiveEmojiCategory] = useState('Cảm xúc');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const insertText = (textToInsert: string, shouldSelect = false) => {
-    const textarea = textareaRef.current;
-    if (!textarea) return;
-
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
-    const newValue = value.slice(0, start) + textToInsert + value.slice(end);
-    
-    onChange(newValue);
-    
-    // Set cursor position after insertion
-    setTimeout(() => {
-      if (shouldSelect) {
-        textarea.setSelectionRange(start, start + textToInsert.length);
-      } else {
-        textarea.setSelectionRange(start + textToInsert.length, start + textToInsert.length);
-      }
-      textarea.focus();
-    }, 0);
-  };
-
-  const applyFormatting = (tool: typeof FORMATTING_TOOLS[0]) => {
+  // Apply Unicode bold formatting to selected text
+  const applyBold = () => {
     const textarea = textareaRef.current;
     if (!textarea) return;
 
@@ -85,82 +52,96 @@ export default function ContentEditor({ value, onChange, placeholder, maxLength 
     const end = textarea.selectionEnd;
     const selectedText = value.slice(start, end);
 
-    if (selectedText) {
-      const formattedText = tool.wrap(selectedText);
-      const newValue = value.slice(0, start) + formattedText + value.slice(end);
-      onChange(newValue);
-      
-      setTimeout(() => {
-        textarea.setSelectionRange(start, start + formattedText.length);
-        textarea.focus();
-      }, 0);
-    } else {
-      // If no text selected, insert placeholder
-      const placeholder = tool.wrap('văn bản');
-      insertText(placeholder, true);
-    }
-  };
+    if (!selectedText) return;
 
-  const applyHeading = (style: typeof HEADING_STYLES[0]) => {
-    const textarea = textareaRef.current;
-    if (!textarea) return;
+    const boldText = selectedText
+      .split('')
+      .map(char => BOLD_MAP[char] || char)
+      .join('');
 
-    const start = textarea.selectionStart;
-    const lineStart = value.lastIndexOf('\n', start - 1) + 1;
-    const lineEnd = value.indexOf('\n', start);
-    const endPos = lineEnd === -1 ? value.length : lineEnd;
-    
-    const currentLine = value.slice(lineStart, endPos);
-    const newLine = style.prefix + currentLine.replace(/^(#{1,3}\s|>\s|•\s)/, '');
-    
-    const newValue = value.slice(0, lineStart) + newLine + value.slice(endPos);
+    const newValue = value.slice(0, start) + boldText + value.slice(end);
     onChange(newValue);
-    
+
     setTimeout(() => {
-      const newCursorPos = lineStart + newLine.length;
-      textarea.setSelectionRange(newCursorPos, newCursorPos);
+      textarea.setSelectionRange(start, start + boldText.length);
       textarea.focus();
     }, 0);
   };
 
+  // Apply Unicode italic formatting to selected text
+  const applyItalic = () => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const selectedText = value.slice(start, end);
+
+    if (!selectedText) return;
+
+    const italicText = selectedText
+      .split('')
+      .map(char => ITALIC_MAP[char] || char)
+      .join('');
+
+    const newValue = value.slice(0, start) + italicText + value.slice(end);
+    onChange(newValue);
+
+    setTimeout(() => {
+      textarea.setSelectionRange(start, start + italicText.length);
+      textarea.focus();
+    }, 0);
+  };
+
+  // Insert emoji at cursor position
   const insertEmoji = (emoji: string) => {
-    insertText(emoji);
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+
+    const newValue = value.slice(0, start) + emoji + value.slice(end);
+    onChange(newValue);
+
+    setTimeout(() => {
+      const newPos = start + emoji.length;
+      textarea.setSelectionRange(newPos, newPos);
+      textarea.focus();
+    }, 0);
+
     setShowEmojis(false);
+  };
+
+  const hasSelection = () => {
+    const textarea = textareaRef.current;
+    if (!textarea) return false;
+    return textarea.selectionStart !== textarea.selectionEnd;
   };
 
   return (
     <div className="space-y-3">
       {/* Formatting Toolbar */}
       <div className="flex flex-wrap items-center gap-2 p-3 bg-gray-50 rounded-lg border">
-        {/* Text Formatting */}
-        <div className="flex gap-1">
-          {FORMATTING_TOOLS.map((tool) => (
-            <button
-              key={tool.id}
-              onClick={() => applyFormatting(tool)}
-              title={tool.label}
-              className="w-8 h-8 flex items-center justify-center rounded bg-white border hover:bg-gray-100 text-sm font-bold"
-            >
-              {tool.icon}
-            </button>
-          ))}
-        </div>
+        {/* Bold Button */}
+        <button
+          onClick={applyBold}
+          disabled={!hasSelection()}
+          title="In đậm (chọn text trước)"
+          className="w-9 h-9 flex items-center justify-center rounded bg-white border hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+        >
+          <Bold className="w-4 h-4" />
+        </button>
 
-        <div className="w-px h-6 bg-gray-300" />
-
-        {/* Heading Styles */}
-        <div className="flex gap-1">
-          {HEADING_STYLES.map((style) => (
-            <button
-              key={style.id}
-              onClick={() => applyHeading(style)}
-              title={style.label}
-              className="px-2 py-1 text-xs bg-white border rounded hover:bg-gray-100"
-            >
-              {style.label}
-            </button>
-          ))}
-        </div>
+        {/* Italic Button */}
+        <button
+          onClick={applyItalic}
+          disabled={!hasSelection()}
+          title="In nghiêng (chọn text trước)"
+          className="w-9 h-9 flex items-center justify-center rounded bg-white border hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+        >
+          <Italic className="w-4 h-4" />
+        </button>
 
         <div className="w-px h-6 bg-gray-300" />
 
@@ -168,52 +149,58 @@ export default function ContentEditor({ value, onChange, placeholder, maxLength 
         <div className="relative">
           <button
             onClick={() => setShowEmojis(!showEmojis)}
-            className="w-8 h-8 flex items-center justify-center rounded bg-white border hover:bg-gray-100"
+            className="w-9 h-9 flex items-center justify-center rounded bg-white border hover:bg-gray-100 transition-colors"
             title="Chèn emoji"
           >
-            😀
+            <Smile className="w-4 h-4" />
           </button>
 
           {/* Emoji Picker */}
           {showEmojis && (
-            <div className="absolute top-10 left-0 z-10 w-80 bg-white border rounded-lg shadow-lg">
-              {/* Emoji Categories */}
-              <div className="flex border-b">
-                {Object.keys(EMOJI_CATEGORIES).map((category) => (
-                  <button
-                    key={category}
-                    onClick={() => setActiveEmojiCategory(category)}
-                    className={`flex-1 px-3 py-2 text-xs ${
-                      activeEmojiCategory === category
-                        ? 'bg-indigo-50 text-indigo-600 border-b-2 border-indigo-600'
-                        : 'text-gray-600 hover:bg-gray-50'
-                    }`}
-                  >
-                    {category}
-                  </button>
-                ))}
-              </div>
-
-              {/* Emoji Grid */}
-              <div className="p-3 max-h-48 overflow-y-auto">
-                <div className="grid grid-cols-8 gap-1">
-                  {EMOJI_CATEGORIES[activeEmojiCategory as keyof typeof EMOJI_CATEGORIES].map((emoji, index) => (
+            <>
+              <div
+                className="fixed inset-0 z-10"
+                onClick={() => setShowEmojis(false)}
+              />
+              <div className="absolute top-10 left-0 z-20 w-80 bg-white border rounded-lg shadow-lg">
+                {/* Emoji Categories */}
+                <div className="flex border-b">
+                  {Object.keys(EMOJI_CATEGORIES).map((category) => (
                     <button
-                      key={index}
-                      onClick={() => insertEmoji(emoji)}
-                      className="w-8 h-8 flex items-center justify-center rounded hover:bg-gray-100 text-lg"
+                      key={category}
+                      onClick={() => setActiveEmojiCategory(category)}
+                      className={`flex-1 px-3 py-2 text-xs font-medium ${
+                        activeEmojiCategory === category
+                          ? 'bg-indigo-50 text-indigo-600 border-b-2 border-indigo-600'
+                          : 'text-gray-600 hover:bg-gray-50'
+                      }`}
                     >
-                      {emoji}
+                      {category}
                     </button>
                   ))}
                 </div>
+
+                {/* Emoji Grid */}
+                <div className="p-3 max-h-48 overflow-y-auto">
+                  <div className="grid grid-cols-8 gap-1">
+                    {EMOJI_CATEGORIES[activeEmojiCategory as keyof typeof EMOJI_CATEGORIES].map((emoji, index) => (
+                      <button
+                        key={index}
+                        onClick={() => insertEmoji(emoji)}
+                        className="w-8 h-8 flex items-center justify-center rounded hover:bg-gray-100 text-xl transition-colors"
+                      >
+                        {emoji}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
-            </div>
+            </>
           )}
         </div>
 
         {/* Character Count */}
-        <div className="ml-auto text-xs text-gray-500">
+        <div className="ml-auto text-sm text-gray-500">
           {value.length}/{maxLength}
         </div>
       </div>
@@ -228,40 +215,12 @@ export default function ContentEditor({ value, onChange, placeholder, maxLength 
           className="w-full min-h-[200px] p-4 border border-gray-200 rounded-lg resize-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
           maxLength={maxLength}
         />
-
-        {/* Click outside to close emoji picker */}
-        {showEmojis && (
-          <div
-            className="fixed inset-0 z-5"
-            onClick={() => setShowEmojis(false)}
-          />
-        )}
       </div>
 
-      {/* Preview */}
-      {value && (
-        <div className="mt-4">
-          <div className="text-sm font-medium text-gray-700 mb-2">Preview:</div>
-          <div className="p-3 bg-gray-50 rounded-lg border">
-            <div className="whitespace-pre-wrap text-sm">
-              {value
-                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-                .replace(/\*(.*?)\*/g, '<em>$1</em>')
-                .replace(/__(.*?)__/g, '<u>$1</u>')
-                .replace(/~~(.*?)~~/g, '<del>$1</del>')
-                .replace(/^# (.*$)/gm, '<h1 class="text-xl font-bold">$1</h1>')
-                .replace(/^## (.*$)/gm, '<h2 class="text-lg font-semibold">$1</h2>')
-                .replace(/^### (.*$)/gm, '<h3 class="text-base font-medium">$1</h3>')
-                .replace(/^> (.*$)/gm, '<blockquote class="border-l-4 border-gray-300 pl-3 italic">$1</blockquote>')
-                .replace(/^• (.*$)/gm, '<li class="ml-4">• $1</li>')
-                .split('\n')
-                .map((line, i) => (
-                  <div key={i} dangerouslySetInnerHTML={{ __html: line || '<br>' }} />
-                ))}
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Helper Text */}
+      <p className="text-xs text-gray-500">
+        💡 Chọn text rồi nhấn <strong>Bold</strong> hoặc <strong>Italic</strong> để format Unicode
+      </p>
     </div>
   );
 }

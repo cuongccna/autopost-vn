@@ -14,6 +14,7 @@ export interface PublishResult {
 export interface PublishData {
   content: string;
   mediaUrls: string[];
+  mediaType?: 'image' | 'video' | 'album' | 'none';
   scheduledAt?: string;
   metadata?: any;
 }
@@ -113,6 +114,7 @@ export class FacebookPublisher extends BaseSocialPublisher {
       logger.info('Facebook Publisher - Starting publish process', {
         pageId,
         hasMedia: data.mediaUrls && data.mediaUrls.length > 0,
+        mediaType: data.mediaType,
         isScheduled: !!data.scheduledAt,
         userId
       });
@@ -144,7 +146,12 @@ export class FacebookPublisher extends BaseSocialPublisher {
         resetAt: rateLimitCheck.resetAt
       });
 
-      // Handle media upload first if present
+      // Handle video post
+      if (data.mediaType === 'video' && data.mediaUrls && data.mediaUrls.length > 0) {
+        return await this.publishVideoPost(data, accessToken, pageId);
+      }
+
+      // Handle media upload first if present (images)
       let uploadedMediaIds: string[] = [];
       if (data.mediaUrls && data.mediaUrls.length > 0) {
         logger.info('Uploading media to Facebook', { count: data.mediaUrls.length });
@@ -296,6 +303,81 @@ export class FacebookPublisher extends BaseSocialPublisher {
     } catch (error) {
       console.error('❌ Media upload error:', error);
       return null;
+    }
+  }
+
+  /**
+   * Publish video post to Facebook Page
+   */
+  private async publishVideoPost(data: PublishData, accessToken: string, pageId: string): Promise<PublishResult> {
+    try {
+      console.log('🎥 Publishing video post to Facebook');
+
+      const videoUrl = data.mediaUrls![0]; // Take first video
+
+      const postData: any = {
+        description: data.content,
+        file_url: videoUrl,
+        access_token: accessToken
+      };
+
+      // Handle scheduling for video
+      if (data.scheduledAt) {
+        const scheduleTime = Math.floor(new Date(data.scheduledAt).getTime() / 1000);
+        const now = Math.floor(Date.now() / 1000);
+        
+        if (scheduleTime > now + 600) {
+          postData.scheduled_publish_time = scheduleTime;
+          postData.published = false;
+          console.log('⏰ Scheduling video for:', new Date(data.scheduledAt));
+        }
+      }
+
+      const endpoint = `https://graph.facebook.com/v18.0/${pageId}/videos`;
+      console.log('🚀 Calling Facebook Video API:', endpoint);
+
+      const response = await this.fetchWithRetry(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(postData),
+        timeoutMs: 30000 // Videos need more time
+      });
+
+      const result = await response.json();
+      
+      console.log('📡 Facebook Video API Response:', {
+        status: response.status,
+        success: response.ok,
+        data: result
+      });
+
+      if (response.ok && result.id) {
+        return {
+          success: true,
+          externalPostId: result.id,
+          platformResponse: result,
+          metadata: {
+            mediaType: 'video',
+            endpoint: endpoint,
+            scheduled: !!postData.scheduled_publish_time
+          }
+        };
+      } else {
+        const errorMessage = this.getFacebookErrorMessage(result);
+        return {
+          success: false,
+          error: errorMessage,
+          platformResponse: result
+        };
+      }
+    } catch (error: any) {
+      console.error('🔴 Facebook Video Publisher Error:', error);
+      return {
+        success: false,
+        error: `Facebook video publish error: ${error.message}`
+      };
     }
   }
 

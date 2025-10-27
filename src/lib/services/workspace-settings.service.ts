@@ -152,15 +152,19 @@ export class WorkspaceSettingsService {
       const oneHourAgo = new Date();
       oneHourAgo.setHours(oneHourAgo.getHours() - 1);
       
+      // Join with posts table to filter by workspace_id
       const { count, error } = await supabase
         .from('autopostvn_post_schedules')
-        .select('*', { count: 'exact', head: true })
+        .select('id, post:autopostvn_posts!inner(workspace_id)', { count: 'exact', head: true })
         .eq('post.workspace_id', workspaceId)
         .gte('created_at', oneHourAgo.toISOString())
         .eq('status', 'published');
       
       if (error) {
-        logger.error('Failed to check rate limit', { error, workspaceId });
+        logger.error('Failed to check rate limit', { 
+          error: error.message, 
+          workspaceId 
+        });
         return { allowed: true, current: 0, limit: settings.scheduling.rateLimit };
       }
       

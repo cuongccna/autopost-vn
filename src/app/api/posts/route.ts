@@ -145,14 +145,15 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { title, content, providers, scheduled_at, media_urls } = body
+    const { title, content, providers, scheduled_at, media_urls, media_type } = body
     
     console.log('📝 [POST] Request body:', {
       title,
       content: content?.substring(0, 50) + '...',
       providers,
       scheduled_at,
-      media_urls_count: media_urls?.length || 0
+      media_urls_count: media_urls?.length || 0,
+      media_type
     });
 
     // Validation
@@ -225,6 +226,7 @@ export async function POST(request: NextRequest) {
         providers: providers || [],
         scheduled_at: normalizedScheduledAt,
         media_urls: media_urls || [],
+        media_type: media_type || 'none',
         status: scheduled_at ? 'scheduled' : 'draft',
       })
       .select()

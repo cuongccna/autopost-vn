@@ -12,6 +12,7 @@ export interface PostValidationData {
     title: string;
     content: string;
     media_urls: string[];
+    media_type?: 'image' | 'video' | 'album' | 'none';
     providers: string[];
     workspace_id: string;
     user_id: string;

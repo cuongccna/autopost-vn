@@ -1,7 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import ImageUpload from '@/components/ui/ImageUpload';
+import MediaUploader, { UploadedMedia } from '@/components/ui/MediaUploader';
+import ContentEditor from '@/components/ui/ContentEditor';
 
 interface ComposeData {
   title: string;
@@ -9,6 +10,7 @@ interface ComposeData {
   channels: string[];
   scheduleAt: string;
   mediaUrls: string[];
+  mediaType?: 'image' | 'video' | 'album' | 'none';
   postId?: string;
   metadata?: {
     type?: 'social' | 'video';
@@ -49,7 +51,7 @@ export default function ComposeCenterPanel({
   showToast
 }: ComposeCenterPanelProps) {
   const [previewDevice, setPreviewDevice] = useState<'mobile' | 'tablet' | 'desktop'>('mobile');
-  const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([]);
+  const [uploadedMedia, setUploadedMedia] = useState<UploadedMedia[]>([]);
   
   // AI Loading states
   const [aiLoading, setAiLoading] = useState({
@@ -95,15 +97,29 @@ export default function ComposeCenterPanel({
     });
   };
 
-  const handleImagesChange = (images: UploadedImage[]) => {
-    setUploadedImages(images);
-    const mediaUrls = images
-      .filter(img => !img.uploading && !img.error && img.publicUrl)
-      .map(img => img.publicUrl);
+  const handleImagesChange = (media: UploadedMedia[]) => {
+    setUploadedMedia(media);
+    const mediaUrls = media.map(m => m.url);
+    
+    // Determine media type
+    let mediaType: 'image' | 'video' | 'album' | 'none' = 'none';
+    if (media.length > 0) {
+      const hasVideo = media.some(m => m.mediaType === 'video');
+      const hasImage = media.some(m => m.mediaType === 'image');
+      
+      if (hasVideo) {
+        mediaType = 'video';
+      } else if (media.length > 1) {
+        mediaType = 'album';
+      } else if (hasImage) {
+        mediaType = 'image';
+      }
+    }
     
     onDataChange({
       ...composeData,
-      mediaUrls
+      mediaUrls,
+      mediaType
     });
   };
 
@@ -302,12 +318,11 @@ export default function ComposeCenterPanel({
                 {aiLoading.content ? 'Đang tạo...' : 'AI tạo nội dung'}
               </button>
             </div>
-            <textarea
+            <ContentEditor
               value={composeData.content || ''}
-              onChange={(e) => handleContentChange(e.target.value)}
-              placeholder="Viết nội dung bài đăng..."
-              rows={6}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+              onChange={handleContentChange}
+              placeholder="Viết nội dung bài đăng của bạn..."
+              maxLength={2000}
             />
           </div>
 
@@ -363,14 +378,18 @@ export default function ComposeCenterPanel({
           {/* Media Upload */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Hình ảnh
+              Hình ảnh & Video
             </label>
-            <ImageUpload
-              userId="compose-user"
-              maxImages={4}
-              onImagesChange={handleImagesChange}
+            <MediaUploader
+              onMediaChange={handleImagesChange}
+              maxFiles={10}
+              acceptImages={true}
+              acceptVideos={true}
               className="mt-2"
             />
+            <p className="mt-1 text-xs text-gray-500">
+              Hỗ trợ: Ảnh (JPG, PNG, GIF, WEBP - 10MB) • Video (MP4, MOV, AVI - 100MB)
+            </p>
           </div>
         </div>
       </div>
