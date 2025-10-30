@@ -52,7 +52,10 @@ export default function ContentEditor({ value, onChange, placeholder, maxLength 
     const end = textarea.selectionEnd;
     const selectedText = value.slice(start, end);
 
-    if (!selectedText) return;
+    if (!selectedText) {
+      alert('Vui lòng chọn đoạn text cần bôi đậm trước!');
+      return;
+    }
 
     const boldText = selectedText
       .split('')
@@ -77,7 +80,10 @@ export default function ContentEditor({ value, onChange, placeholder, maxLength 
     const end = textarea.selectionEnd;
     const selectedText = value.slice(start, end);
 
-    if (!selectedText) return;
+    if (!selectedText) {
+      alert('Vui lòng chọn đoạn text cần in nghiêng trước!');
+      return;
+    }
 
     const italicText = selectedText
       .split('')
@@ -113,12 +119,6 @@ export default function ContentEditor({ value, onChange, placeholder, maxLength 
     setShowEmojis(false);
   };
 
-  const hasSelection = () => {
-    const textarea = textareaRef.current;
-    if (!textarea) return false;
-    return textarea.selectionStart !== textarea.selectionEnd;
-  };
-
   return (
     <div className="space-y-3">
       {/* Formatting Toolbar */}
@@ -126,9 +126,8 @@ export default function ContentEditor({ value, onChange, placeholder, maxLength 
         {/* Bold Button */}
         <button
           onClick={applyBold}
-          disabled={!hasSelection()}
           title="In đậm (chọn text trước)"
-          className="w-9 h-9 flex items-center justify-center rounded bg-white border hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          className="w-9 h-9 flex items-center justify-center rounded bg-white border hover:bg-indigo-100 hover:border-indigo-500 transition-colors"
         >
           <Bold className="w-4 h-4" />
         </button>
@@ -136,9 +135,8 @@ export default function ContentEditor({ value, onChange, placeholder, maxLength 
         {/* Italic Button */}
         <button
           onClick={applyItalic}
-          disabled={!hasSelection()}
           title="In nghiêng (chọn text trước)"
-          className="w-9 h-9 flex items-center justify-center rounded bg-white border hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          className="w-9 h-9 flex items-center justify-center rounded bg-white border hover:bg-indigo-100 hover:border-indigo-500 transition-colors"
         >
           <Italic className="w-4 h-4" />
         </button>

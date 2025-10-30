@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import MediaUploader, { UploadedMedia } from '@/components/ui/MediaUploader';
 import ContentEditor from '@/components/ui/ContentEditor';
+import { FileText } from 'lucide-react';
 
 interface ComposeData {
   title: string;
@@ -12,6 +13,7 @@ interface ComposeData {
   mediaUrls: string[];
   mediaType?: 'image' | 'video' | 'album' | 'none';
   postId?: string;
+  aiContext?: string; // AI context description
   metadata?: {
     type?: 'social' | 'video';
     platform: string;
@@ -52,6 +54,7 @@ export default function ComposeCenterPanel({
 }: ComposeCenterPanelProps) {
   const [previewDevice, setPreviewDevice] = useState<'mobile' | 'tablet' | 'desktop'>('mobile');
   const [uploadedMedia, setUploadedMedia] = useState<UploadedMedia[]>([]);
+  const [showContextModal, setShowContextModal] = useState(false);
   
   // AI Loading states
   const [aiLoading, setAiLoading] = useState({
@@ -98,16 +101,30 @@ export default function ComposeCenterPanel({
   };
 
   const handleImagesChange = (media: UploadedMedia[]) => {
+    // Check for mixed media types (video + images)
+    const hasVideo = media.some(m => m.mediaType === 'video');
+    const hasImage = media.some(m => m.mediaType === 'image');
+    
+    if (hasVideo && hasImage) {
+      showToast?.({
+        title: 'Lỗi upload',
+        message: 'Facebook không hỗ trợ đăng video và hình ảnh cùng lúc. Vui lòng chọn chỉ video HOẶC hình ảnh.',
+        type: 'error'
+      });
+      // Remove the last uploaded file (the one causing the conflict)
+      const filteredMedia = media.slice(0, -1);
+      setUploadedMedia(filteredMedia);
+      return;
+    }
+    
     setUploadedMedia(media);
     const mediaUrls = media.map(m => m.url);
     
     // Determine media type
     let mediaType: 'image' | 'video' | 'album' | 'none' = 'none';
     if (media.length > 0) {
-      const hasVideo = media.some(m => m.mediaType === 'video');
-      const hasImage = media.some(m => m.mediaType === 'image');
-      
       if (hasVideo) {
+        // Facebook only supports 1 video per post
         mediaType = 'video';
       } else if (media.length > 1) {
         mediaType = 'album';
@@ -138,6 +155,7 @@ export default function ComposeCenterPanel({
           platform: (composeData.metadata?.platform || 'Facebook Page').toLowerCase().replace(' page', ''),
           title: composeData.title || '',
           content: composeData.content || '',
+          context: composeData.aiContext || '', // Add AI context
           tone: 'exciting',
           targetAudience: 'general'
         }),
@@ -278,11 +296,20 @@ export default function ComposeCenterPanel({
         </h2>
         
         <div className="space-y-4">
-          {/* Title/Hook */}
+          {/* Title/Hook with Context Button */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Tiêu đề / Hook
-            </label>
+            <div className="flex items-center justify-between mb-2">
+              <label className="block text-sm font-medium text-gray-700">
+                Tiêu đề / Hook
+              </label>
+              <button
+                onClick={() => setShowContextModal(true)}
+                className="text-sm text-indigo-600 hover:text-indigo-700 font-medium flex items-center gap-1 transition-colors"
+              >
+                <FileText className="w-4 h-4" />
+                Mô tả ngữ cảnh cho AI
+              </button>
+            </div>
             <input
               type="text"
               value={composeData.title || ''}
@@ -544,6 +571,85 @@ export default function ComposeCenterPanel({
           )}
         </div>
       </div>
+
+      {/* AI Context Modal */}
+      {showContextModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[80vh] overflow-hidden">
+            {/* Header */}
+            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Mô tả ngữ cảnh cho AI</h3>
+                <p className="text-sm text-gray-500 mt-1">Cung cấp thông tin chi tiết để AI tạo nội dung chính xác hơn</p>
+              </div>
+              <button
+                onClick={() => setShowContextModal(false)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="px-6 py-4 overflow-y-auto max-h-[calc(80vh-180px)]">
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Ngữ cảnh chi tiết
+                  </label>
+                  <textarea
+                    value={composeData.aiContext || ''}
+                    onChange={(e) => onDataChange({ ...composeData, aiContext: e.target.value })}
+                    placeholder="Ví dụ: Đây là bài đăng về sản phẩm mới của công ty chúng tôi - Smart Link Manager. Sản phẩm giúp rút gọn link và quản lý link thông minh. Target audience là marketer và business owner. Tone: chuyên nghiệp nhưng thân thiện."
+                    rows={8}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none"
+                  />
+                  <p className="text-xs text-gray-500 mt-2">
+                    💡 Càng mô tả chi tiết về sản phẩm/dịch vụ, đối tượng khách hàng, phong cách viết, AI sẽ tạo nội dung chính xác hơn
+                  </p>
+                </div>
+
+                {/* Quick suggestions */}
+                <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4">
+                  <h4 className="text-sm font-medium text-indigo-900 mb-2">Gợi ý nội dung nên bao gồm:</h4>
+                  <ul className="text-sm text-indigo-700 space-y-1">
+                    <li>• Sản phẩm/dịch vụ là gì?</li>
+                    <li>• Đối tượng khách hàng mục tiêu?</li>
+                    <li>• Phong cách viết (chuyên nghiệp, thân thiện, hài hước...)?</li>
+                    <li>• Mục tiêu của bài đăng (giới thiệu, khuyến mãi, tương tác...)?</li>
+                    <li>• Thông điệp chính muốn truyền tải?</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-end gap-3">
+              <button
+                onClick={() => setShowContextModal(false)}
+                className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-md transition-colors"
+              >
+                Hủy
+              </button>
+              <button
+                onClick={() => {
+                  setShowContextModal(false);
+                  showToast?.({
+                    message: 'Ngữ cảnh đã được lưu. Nhấn "AI tạo nội dung" để tạo bài viết!',
+                    type: 'success',
+                    title: 'Lưu thành công'
+                  });
+                }}
+                className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors"
+              >
+                Lưu ngữ cảnh
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

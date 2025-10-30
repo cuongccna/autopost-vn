@@ -46,6 +46,19 @@ export default function MediaUploader({
       return;
     }
 
+    // Check for mixed media types
+    const currentHasVideo = media.some(m => m.mediaType === 'video');
+    const currentHasImage = media.some(m => m.mediaType === 'image');
+    
+    const newFiles = Array.from(files);
+    const newHasVideo = newFiles.some(f => f.type.startsWith('video/'));
+    const newHasImage = newFiles.some(f => f.type.startsWith('image/'));
+
+    if ((currentHasVideo && newHasImage) || (currentHasImage && newHasVideo)) {
+      showToast.error('Không thể upload cả video và hình ảnh cùng lúc. Facebook chỉ hỗ trợ 1 loại media.');
+      return;
+    }
+
     setUploading(true);
     const newMedia: UploadedMedia[] = [];
 
