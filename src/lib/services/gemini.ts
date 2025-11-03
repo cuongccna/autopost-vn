@@ -14,6 +14,37 @@ export interface GeminiConfig {
   maxOutputTokens?: number;
 }
 
+export interface AIContext {
+  // Business context
+  category?: string;
+  businessType?: string;
+  brandVoice?: string;
+  primaryGoal?: 'awareness' | 'engagement' | 'conversion' | 'education';
+  
+  // Audience context
+  targetAge?: string;
+  targetInterests?: string[];
+  targetAudience?: string;
+  location?: string;
+  
+  // Content context
+  previousPosts?: Array<{
+    content: string;
+    engagement: number;
+    platform: string;
+  }>;
+  currentTrends?: string[];
+  seasonalContext?: string;
+  competitorInsights?: string;
+  
+  // Product/Service context
+  productType?: string;
+  features?: string[];
+  benefits?: string[];
+  price?: string;
+  promotion?: string;
+}
+
 const defaultConfig: GeminiConfig = {
   temperature: 0.7,
   topP: 0.8,
@@ -22,18 +53,17 @@ const defaultConfig: GeminiConfig = {
 };
 
 /**
- * Generate content caption for social media posts
+ * Generate content caption for social media posts with rich context
  */
 export async function generateCaption(params: {
   platform: 'instagram' | 'facebook' | 'tiktok' | 'zalo';
   title: string;
   content?: string;
   tone?: 'professional' | 'casual' | 'exciting' | 'promotional';
-  targetAudience?: string;
-  productType?: string;
+  aiContext?: AIContext;
   config?: GeminiConfig;
 }): Promise<string> {
-  const { platform, title, content, tone = 'exciting', targetAudience, productType, config = defaultConfig } = params;
+  const { platform, title, content, tone = 'exciting', aiContext = {}, config = defaultConfig } = params;
   
   const platformSpecs = {
     instagram: {
@@ -60,14 +90,67 @@ export async function generateCaption(params: {
 
   const spec = platformSpecs[platform];
   
+  // Build rich context prompt
+  let contextSection = '';
+  
+  if (aiContext.category || aiContext.businessType) {
+    contextSection += `\n**Bối cảnh doanh nghiệp:**`;
+    if (aiContext.category) contextSection += `\n- Ngành: ${aiContext.category}`;
+    if (aiContext.businessType) contextSection += `\n- Loại hình: ${aiContext.businessType}`;
+    if (aiContext.brandVoice) contextSection += `\n- Giọng điệu thương hiệu: ${aiContext.brandVoice}`;
+    if (aiContext.primaryGoal) contextSection += `\n- Mục tiêu chính: ${aiContext.primaryGoal}`;
+  }
+  
+  if (aiContext.targetAge || aiContext.targetInterests?.length || aiContext.location) {
+    contextSection += `\n\n**Đối tượng khách hàng:**`;
+    if (aiContext.targetAge) contextSection += `\n- Độ tuổi: ${aiContext.targetAge}`;
+    if (aiContext.targetInterests?.length) contextSection += `\n- Sở thích: ${aiContext.targetInterests.join(', ')}`;
+    if (aiContext.targetAudience) contextSection += `\n- Nhóm khách hàng: ${aiContext.targetAudience}`;
+    if (aiContext.location) contextSection += `\n- Vị trí: ${aiContext.location}`;
+  }
+  
+  if (aiContext.features?.length || aiContext.benefits?.length || aiContext.price || aiContext.promotion) {
+    contextSection += `\n\n**Thông tin sản phẩm/dịch vụ:**`;
+    if (aiContext.productType) contextSection += `\n- Loại: ${aiContext.productType}`;
+    if (aiContext.features?.length) contextSection += `\n- Tính năng nổi bật: ${aiContext.features.join(', ')}`;
+    if (aiContext.benefits?.length) contextSection += `\n- Lợi ích: ${aiContext.benefits.join(', ')}`;
+    if (aiContext.price) contextSection += `\n- Giá: ${aiContext.price}`;
+    if (aiContext.promotion) contextSection += `\n- Khuyến mãi: ${aiContext.promotion}`;
+  }
+  
+  if (aiContext.previousPosts?.length) {
+    const topPosts = aiContext.previousPosts
+      .sort((a, b) => b.engagement - a.engagement)
+      .slice(0, 3);
+    
+    contextSection += `\n\n**Bài đăng hiệu quả trước đây:**`;
+    topPosts.forEach((post, idx) => {
+      contextSection += `\n${idx + 1}. "${post.content.substring(0, 100)}..." (${post.engagement} tương tác trên ${post.platform})`;
+    });
+  }
+  
+  if (aiContext.currentTrends?.length) {
+    contextSection += `\n\n**Xu hướng hiện tại:**`;
+    aiContext.currentTrends.forEach(trend => {
+      contextSection += `\n- ${trend}`;
+    });
+  }
+  
+  if (aiContext.seasonalContext) {
+    contextSection += `\n\n**Bối cảnh thời điểm:** ${aiContext.seasonalContext}`;
+  }
+  
+  if (aiContext.competitorInsights) {
+    contextSection += `\n\n**Phân tích đối thủ:** ${aiContext.competitorInsights}`;
+  }
+  
   const prompt = `
 Tạo caption cho bài đăng ${platform.toUpperCase()} với thông tin sau:
 
 **Thông tin sản phẩm/nội dung:**
 - Tiêu đề: ${title}
 ${content ? `- Mô tả: ${content}` : ''}
-${productType ? `- Loại sản phẩm: ${productType}` : ''}
-${targetAudience ? `- Đối tượng khách hàng: ${targetAudience}` : ''}
+${contextSection}
 
 **Yêu cầu cho ${platform}:**
 - Độ dài tối đa: ${spec.maxLength} ký tự
@@ -97,10 +180,13 @@ Chào cả nhà! Hôm nay tớ có một món quà cực kỳ đặc biệt mu�
 Đừng bỏ lỡ cơ hội này nhé! 💝
 
 **Lưu ý đặc biệt:**
-- Tạo nội dung hấp dẫn, dễ đọc
+- Tạo nội dung hấp dẫn, dễ đọc, PHÙ HỢP với context đã cung cấp
 - Sử dụng emoji phù hợp (nhưng đừng quá nhiều)
 - Có call-to-action rõ ràng
 - Hashtags trending và phù hợp (nếu phù hợp với platform)
+${aiContext.previousPosts?.length ? '- Học hỏi từ các bài đăng hiệu quả trước đây' : ''}
+${aiContext.currentTrends?.length ? '- Tận dụng xu hướng hiện tại' : ''}
+${aiContext.seasonalContext ? '- Kết hợp yếu tố thời điểm/mùa vụ' : ''}
 
 Trả về chỉ nội dung caption dạng plain text, không có markdown, không có giải thích thêm.
 `;
@@ -128,18 +214,28 @@ Trả về chỉ nội dung caption dạng plain text, không có markdown, khô
 }
 
 /**
- * Generate hashtags for social media posts
+ * Generate hashtags for social media posts with rich context
  */
 export async function generateHashtags(params: {
   platform: 'instagram' | 'facebook' | 'tiktok' | 'zalo';
   title: string;
   content?: string;
-  productType?: string;
-  targetAudience?: string;
+  aiContext?: AIContext;
   count?: number;
   config?: GeminiConfig;
 }): Promise<string[]> {
-  const { platform, title, content, productType, targetAudience, count = 10, config = defaultConfig } = params;
+  const { platform, title, content, aiContext = {}, count = 10, config = defaultConfig } = params;
+
+  // Build context section
+  let contextSection = '';
+  
+  if (aiContext.category) contextSection += `\n- Ngành: ${aiContext.category}`;
+  if (aiContext.productType) contextSection += `\n- Loại sản phẩm: ${aiContext.productType}`;
+  if (aiContext.targetAudience) contextSection += `\n- Đối tượng: ${aiContext.targetAudience}`;
+  if (aiContext.location) contextSection += `\n- Vị trí: ${aiContext.location}`;
+  if (aiContext.currentTrends?.length) {
+    contextSection += `\n- Xu hướng: ${aiContext.currentTrends.join(', ')}`;
+  }
 
   const prompt = `
 Tạo ${count} hashtags phù hợp cho bài đăng ${platform.toUpperCase()} với thông tin:
@@ -147,8 +243,7 @@ Tạo ${count} hashtags phù hợp cho bài đăng ${platform.toUpperCase()} v�
 **Nội dung:**
 - Tiêu đề: ${title}
 ${content ? `- Mô tả: ${content}` : ''}
-${productType ? `- Loại sản phẩm: ${productType}` : ''}
-${targetAudience ? `- Đối tượng: ${targetAudience}` : ''}
+${contextSection}
 
 **Yêu cầu:**
 - ${count} hashtags phù hợp nhất
@@ -156,6 +251,8 @@ ${targetAudience ? `- Đối tượng: ${targetAudience}` : ''}
 - Phù hợp với thị trường Việt Nam
 - Bao gồm cả tiếng Việt và tiếng Anh
 - Tối ưu cho ${platform}
+${aiContext.currentTrends?.length ? '- Tận dụng xu hướng hiện tại' : ''}
+${aiContext.category ? `- Liên quan đến ngành ${aiContext.category}` : ''}
 
 **Định dạng trả về:**
 Trả về danh sách hashtags, mỗi hashtag một dòng, bắt đầu bằng #

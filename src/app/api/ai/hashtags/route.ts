@@ -36,8 +36,7 @@ export async function POST(request: NextRequest) {
       platform, 
       title, 
       content, 
-      productType,
-      targetAudience,
+      aiContext, // Accept rich AI context
       count = 10 
     } = body;
 
@@ -72,13 +71,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Generate hashtags using Gemini
+    // Generate hashtags using Gemini with rich context
     const hashtags = await generateHashtags({
       platform: platform as 'instagram' | 'facebook' | 'tiktok' | 'zalo',
       title,
       content,
-      productType,
-      targetAudience,
+      aiContext, // Pass the rich context to Gemini
       count,
     });
 

@@ -9,8 +9,7 @@ export async function POST(request: NextRequest) {
       title, 
       content, 
       tone = 'exciting',
-      targetAudience = 'general',
-      productType = 'general' 
+      aiContext
     } = body;
 
     // Validation
@@ -22,7 +21,7 @@ export async function POST(request: NextRequest) {
     }
 
     console.log('DEBUG: Generating caption with params:', {
-      platform, title, content, tone, targetAudience, productType
+      platform, title, content, tone, aiContext
     });
 
     // Generate caption using Gemini
@@ -31,8 +30,7 @@ export async function POST(request: NextRequest) {
       title,
       content,
       tone: tone as 'professional' | 'casual' | 'exciting' | 'promotional',
-      targetAudience,
-      productType,
+      aiContext,
     });
 
     console.log('DEBUG: Generated caption:', caption);
@@ -40,7 +38,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ 
       caption,
       debug: {
-        input: { platform, title, content, tone, targetAudience, productType },
+        input: { platform, title, content, tone, aiContext },
         timestamp: new Date().toISOString(),
       }
     });

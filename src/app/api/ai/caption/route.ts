@@ -37,8 +37,7 @@ export async function POST(request: NextRequest) {
       title, 
       content, 
       tone = 'exciting',
-      targetAudience,
-      productType 
+      aiContext // Accept rich AI context
     } = body;
 
     // Validation
@@ -65,14 +64,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Generate caption using Gemini
+    // Generate caption using Gemini with rich context
     const caption = await generateCaption({
       platform: platform as 'instagram' | 'facebook' | 'tiktok' | 'zalo',
       title,
       content,
       tone: tone as 'professional' | 'casual' | 'exciting' | 'promotional',
-      targetAudience,
-      productType,
+      aiContext, // Pass the rich context to Gemini
     });
 
     // Log successful AI usage
