@@ -130,9 +130,40 @@ export async function POST(request: NextRequest) {
 
     const publicUrl = urlData.publicUrl;
 
+    // Get workspace_id from session if available
+    const workspaceId = (session.user as any).workspace_id || null;
+
+    // Save to autopostvn_media table
+    const { data: mediaRecord, error: dbError } = await supabase
+      .from('autopostvn_media')
+      .insert({
+        user_id: userId,
+        workspace_id: workspaceId,
+        file_name: file.name,
+        file_path: fileName,
+        file_type: file.type,
+        file_size: file.size,
+        media_type: isImage ? 'image' : 'video',
+        bucket: bucket,
+        public_url: publicUrl,
+        status: 'uploaded',
+        metadata: {
+          original_name: file.name,
+          uploaded_at: new Date().toISOString(),
+        },
+      })
+      .select()
+      .single();
+
+    if (dbError) {
+      console.error('Failed to save media record:', dbError);
+      // Don't fail the upload, just log the error
+    }
+
     return NextResponse.json({
       success: true,
       file: {
+        id: mediaRecord?.id, // Include media ID for reference
         name: file.name,
         type: file.type,
         size: file.size,

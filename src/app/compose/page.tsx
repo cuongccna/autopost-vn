@@ -65,6 +65,8 @@ export default function ComposePage() {
   const [submissionResult, setSubmissionResult] = useState<any>(null);
   const [editingPostId, setEditingPostId] = useState<string | null>(null);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [hasConnectedAccounts, setHasConnectedAccounts] = useState<boolean>(true);
+  const [isCheckingAccounts, setIsCheckingAccounts] = useState<boolean>(true);
   
   // Rate limit hook
   const { 
@@ -79,7 +81,7 @@ export default function ComposePage() {
   console.log('📄 ComposePage - rateLimitData:', rateLimitData);
   console.log('📄 ComposePage - getRateLimitMessage:', getRateLimitMessage);
 
-  // Check authentication
+  // Check authentication and connected accounts
   useEffect(() => {
     // 🚨 EMERGENCY: Disable rate limit check to prevent infinite loop
     if (process.env.NODE_ENV === 'development') {
@@ -93,6 +95,35 @@ export default function ComposePage() {
     }
     
     let mounted = true;
+    
+    // Check connected accounts
+    const checkAccounts = async () => {
+      try {
+        setIsCheckingAccounts(true);
+        const response = await fetch('/api/user/accounts');
+        
+        if (response.ok) {
+          const data = await response.json();
+          const hasAccounts = data.accounts && data.accounts.length > 0;
+          setHasConnectedAccounts(hasAccounts);
+          
+          if (!hasAccounts) {
+            showToast({
+              title: 'Chưa kết nối tài khoản',
+              message: 'Vui lòng kết nối ít nhất một tài khoản mạng xã hội để có thể đăng bài.',
+              type: 'warning',
+              duration: 10000
+            });
+          }
+        }
+      } catch (error) {
+        console.error('Error checking accounts:', error);
+      } finally {
+        setIsCheckingAccounts(false);
+      }
+    };
+    
+    checkAccounts();
     
     // Check rate limit on page load with delay to prevent rapid calls
     const timer = setTimeout(() => {
@@ -112,6 +143,23 @@ export default function ComposePage() {
     if (isSubmitting) return;
     const startTime = Date.now();
     const isEditing = !!editingPostId;
+    
+    // Check if user has connected accounts
+    if (!hasConnectedAccounts) {
+      showToast({
+        title: 'Chưa kết nối tài khoản',
+        message: 'Vui lòng kết nối ít nhất một tài khoản mạng xã hội trước khi đăng bài.',
+        type: 'error',
+        duration: 8000
+      });
+      
+      // Redirect to settings after 2 seconds
+      setTimeout(() => {
+        router.push('/app?connect=true');
+      }, 2000);
+      
+      return;
+    }
     
     // Store original data for comparison in case of update
     const originalData = isEditing ? { ...composeData } : null;
@@ -310,12 +358,13 @@ export default function ComposePage() {
             
             <button
               onClick={() => handleSubmit(composeData as ComposeData)}
-              disabled={isSubmitting || (!editingPostId && !canCreatePost())}
+              disabled={isSubmitting || !hasConnectedAccounts || (!editingPostId && !canCreatePost())}
               className={`px-6 py-2 text-sm font-medium rounded-lg transition-colors flex items-center gap-2 ${
-                isSubmitting || (!editingPostId && !canCreatePost())
+                isSubmitting || !hasConnectedAccounts || (!editingPostId && !canCreatePost())
                   ? 'bg-gray-400 text-gray-700 cursor-not-allowed'
                   : 'bg-blue-600 text-white hover:bg-blue-700'
               }`}
+              title={!hasConnectedAccounts ? 'Vui lòng kết nối tài khoản trước' : ''}
             >
               {isSubmitting ? (
                 <>
@@ -346,6 +395,35 @@ export default function ComposePage() {
                   {getRateLimitMessage(rateLimitData)}
                 </div>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* No Connected Accounts Warning */}
+        {!isCheckingAccounts && !hasConnectedAccounts && (
+          <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center">
+                <div className="flex-shrink-0">
+                  <svg className="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                  </svg>
+                </div>
+                <div className="ml-3">
+                  <h3 className="text-sm font-medium text-yellow-800">
+                    Chưa kết nối tài khoản mạng xã hội
+                  </h3>
+                  <div className="mt-1 text-sm text-yellow-700">
+                    Bạn cần kết nối ít nhất một tài khoản (Facebook, Instagram, hoặc Zalo) để có thể đăng bài.
+                  </div>
+                </div>
+              </div>
+              <button
+                onClick={() => router.push('/app?connect=true')}
+                className="ml-3 px-4 py-2 bg-yellow-600 text-white text-sm font-medium rounded-lg hover:bg-yellow-700 transition-colors whitespace-nowrap"
+              >
+                Kết nối ngay
+              </button>
             </div>
           </div>
         )}

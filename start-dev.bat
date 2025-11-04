@@ -1,0 +1,6 @@
+@echo off
+echo Starting AutoPost VN Development Environment...
+echo.
+
+echo Starting Next.js on localhost:3000...
+npm run dev

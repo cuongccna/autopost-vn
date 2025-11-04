@@ -2,8 +2,10 @@
 
 import { useState } from 'react';
 import MediaUploader, { UploadedMedia } from '@/components/ui/MediaUploader';
+import MediaLibraryPicker from '@/components/features/media/MediaLibraryPicker';
 import ContentEditor from '@/components/ui/ContentEditor';
-import { FileText } from 'lucide-react';
+import HashtagItem from '@/components/ui/HashtagItem';
+import { FileText, FolderOpen, Info } from 'lucide-react';
 
 interface ComposeData {
   title: string;
@@ -55,6 +57,9 @@ export default function ComposeCenterPanel({
   const [previewDevice, setPreviewDevice] = useState<'mobile' | 'tablet' | 'desktop'>('mobile');
   const [uploadedMedia, setUploadedMedia] = useState<UploadedMedia[]>([]);
   const [showContextModal, setShowContextModal] = useState(false);
+  const [showMediaPicker, setShowMediaPicker] = useState(false);
+  const [hashtagValidation, setHashtagValidation] = useState<any>(null);
+  const [hashtagRecommendations, setHashtagRecommendations] = useState<string[]>([]);
   
   // AI Loading states
   const [aiLoading, setAiLoading] = useState({
@@ -138,6 +143,20 @@ export default function ComposeCenterPanel({
       mediaUrls,
       mediaType
     });
+  };
+
+  const handleMediaFromLibrary = (selectedMedia: any[]) => {
+    const mediaForUpload: UploadedMedia[] = selectedMedia.map(item => ({
+      name: item.file_name,
+      type: item.file_type,
+      size: item.file_size,
+      url: item.public_url,
+      path: item.file_path,
+      bucket: item.bucket || 'media',
+      mediaType: item.media_type,
+    }));
+    
+    handleImagesChange([...uploadedMedia, ...mediaForUpload]);
   };
 
   // Generate AI content
@@ -244,11 +263,34 @@ export default function ComposeCenterPanel({
       if (data.hashtags) {
         const hashtags = Array.isArray(data.hashtags) ? data.hashtags.join(' ') : data.hashtags;
         handleHashtagsChange(hashtags);
+        
+        // Store validation results
+        setHashtagValidation(data.validation);
+        setHashtagRecommendations(data.recommendations || []);
+        
+        // Show summary in toast
+        const summary = data.validation?.summary;
+        let toastMessage = 'Hashtags đã được tạo thành công bằng AI';
+        if (summary) {
+          toastMessage += ` (✅ ${summary.valid} | ⚠️ ${summary.warnings} | ❌ ${summary.errors})`;
+        }
+        
         showToast?.({
-          message: 'Hashtags đã được tạo thành công bằng AI',
-          type: 'success',
+          message: toastMessage,
+          type: summary?.errors > 0 ? 'warning' : 'success',
           title: 'Tạo hashtags thành công'
         });
+        
+        // Show platform warning if exists
+        if (summary?.platformWarning) {
+          setTimeout(() => {
+            showToast?.({
+              message: summary.platformWarning,
+              type: 'warning',
+              title: 'Lưu ý về platform'
+            });
+          }, 1000);
+        }
       }
     } catch (error) {
       console.error('Error generating hashtags:', error);
@@ -386,6 +428,54 @@ export default function ComposeCenterPanel({
               placeholder="#hashtag #trend #viral"
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
+            
+            {/* Hashtag Validation Display */}
+            {hashtagValidation && (
+              <div className="mt-3 space-y-2">
+                {/* Summary */}
+                {hashtagValidation.summary?.platformWarning && (
+                  <div className="flex items-start gap-2 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs text-yellow-800">
+                    <Info className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                    <span>{hashtagValidation.summary.platformWarning}</span>
+                  </div>
+                )}
+                
+                {/* Hashtags with validation */}
+                <div className="flex flex-wrap gap-2">
+                  {hashtagValidation.validations?.map((validation: any, idx: number) => (
+                    <HashtagItem
+                      key={idx}
+                      hashtag={validation.hashtag}
+                      validation={validation}
+                      onRemove={(tag) => {
+                        const currentTags = (composeData.metadata?.hashtags || '').split(' ');
+                        const newTags = currentTags.filter(t => t !== tag).join(' ');
+                        handleHashtagsChange(newTags);
+                        // Update validation
+                        setHashtagValidation({
+                          ...hashtagValidation,
+                          validations: hashtagValidation.validations.filter((v: any) => v.hashtag !== tag)
+                        });
+                      }}
+                    />
+                  ))}
+                </div>
+                
+                {/* Recommendations */}
+                {hashtagRecommendations.length > 0 && (
+                  <details className="text-xs">
+                    <summary className="cursor-pointer text-gray-600 hover:text-gray-900 font-medium">
+                      💡 Platform Guidelines ({hashtagRecommendations.length})
+                    </summary>
+                    <ul className="mt-2 space-y-1 text-gray-600 list-disc list-inside">
+                      {hashtagRecommendations.map((rec, idx) => (
+                        <li key={idx}>{rec}</li>
+                      ))}
+                    </ul>
+                  </details>
+                )}
+              </div>
+            )}
           </div>
 
           {/* CTA */}
@@ -407,13 +497,28 @@ export default function ComposeCenterPanel({
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Hình ảnh & Video
             </label>
-            <MediaUploader
-              onMediaChange={handleImagesChange}
-              maxFiles={10}
-              acceptImages={true}
-              acceptVideos={true}
-              className="mt-2"
-            />
+            
+            {/* Upload & Library Buttons */}
+            <div className="flex gap-2 mb-2">
+              <div className="flex-1">
+                <MediaUploader
+                  onMediaChange={handleImagesChange}
+                  maxFiles={10}
+                  acceptImages={true}
+                  acceptVideos={true}
+                  className="mt-0"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowMediaPicker(true)}
+                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors flex items-center gap-2 border border-gray-300"
+              >
+                <FolderOpen className="w-4 h-4" />
+                <span className="hidden sm:inline">Thư viện</span>
+              </button>
+            </div>
+            
             <p className="mt-1 text-xs text-gray-500">
               Hỗ trợ: Ảnh (JPG, PNG, GIF, WEBP - 10MB) • Video (MP4, MOV, AVI - 100MB)
             </p>
@@ -650,6 +755,15 @@ export default function ComposeCenterPanel({
           </div>
         </div>
       )}
+
+      {/* Media Library Picker Modal */}
+      <MediaLibraryPicker
+        isOpen={showMediaPicker}
+        onClose={() => setShowMediaPicker(false)}
+        onSelect={handleMediaFromLibrary}
+        maxSelect={10 - uploadedMedia.length}
+        mediaType="all"
+      />
     </div>
   );
 }

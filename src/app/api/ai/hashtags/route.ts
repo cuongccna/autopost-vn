@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { generateHashtags } from '@/lib/services/gemini';
 import { checkAIRateLimit, logAIUsage } from '@/lib/services/aiUsageService';
+import { validateHashtags, getPlatformRecommendations } from '@/lib/services/hashtag-validator';
 
 export async function POST(request: NextRequest) {
   let userId: string | null = null;
@@ -80,15 +81,34 @@ export async function POST(request: NextRequest) {
       count,
     });
 
+    // Validate generated hashtags
+    const validation = validateHashtags(
+      hashtags,
+      platform as 'instagram' | 'facebook' | 'tiktok' | 'zalo'
+    );
+
+    // Get platform recommendations
+    const recommendations = getPlatformRecommendations(
+      platform as 'instagram' | 'facebook' | 'tiktok' | 'zalo'
+    );
+
     // Log successful AI usage
     await logAIUsage(userId, 'hashtags', true, 0);
 
     return NextResponse.json({ 
       hashtags,
+      validation: {
+        validations: validation.validations,
+        summary: validation.summary,
+      },
+      recommendations,
       metadata: {
         platform,
         title,
         count: hashtags.length,
+        validCount: validation.summary.valid,
+        warningCount: validation.summary.warnings,
+        errorCount: validation.summary.errors,
         generatedAt: new Date().toISOString(),
       }
     });
