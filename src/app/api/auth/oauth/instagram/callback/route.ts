@@ -3,6 +3,9 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { UserManagementService } from '@/lib/services/UserManagementService';
 
+// Force dynamic rendering - OAuth callbacks must be dynamic
+export const dynamic = 'force-dynamic';
+
 /**
  * Instagram OAuth Callback Handler
  * Processes the authorization code and exchanges it for access token

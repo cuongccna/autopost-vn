@@ -4,6 +4,9 @@ import { authOptions } from '@/lib/auth';
 import { UserManagementService } from '@/lib/services/UserManagementService';
 import logger, { loggers } from '@/lib/utils/logger';
 
+// Force dynamic rendering - OAuth callbacks must be dynamic
+export const dynamic = 'force-dynamic';
+
 /**
  * Facebook OAuth Callback Handler
  * Processes the authorization code and exchanges it for access token
