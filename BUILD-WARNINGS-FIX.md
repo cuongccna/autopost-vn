@@ -53,10 +53,12 @@ const nextConfig = {
       fullUrl: false,
     },
   },
-  
-  // Optimize build output
-  output: 'standalone',
 }
+```
+
+**⚠️ KHÔNG dùng `output: 'standalone'`** - Sẽ gây lỗi khi start:
+```
+Error: ENOENT: no such file or directory, open '.next/prerender-manifest.json'
 ```
 
 #### 3. **Disable telemetry**
@@ -219,12 +221,69 @@ npm run build:verbose 2>&1 | Select-String "Error:"
 
 **Vấn đề:** Warnings "Dynamic server usage" khi build
 **Nguyên nhân:** API routes dùng `headers()` → không thể static render
-**Giải pháp:** Suppress warnings trong build script
-**Kết quả:** Clean build output, app hoạt động bình thường ✅
+**Giải pháp:** Chấp nhận warnings (không ảnh hưởng app)
+**Kết quả:** Build success, app hoạt động bình thường ✅
 
 **Files changed:**
 - `package.json` - Updated build script
-- `next.config.mjs` - Added logging config
+- `next.config.mjs` - Added logging config (REMOVED standalone output)
 - `.env.production` - Disabled telemetry
+
+---
+
+## 🚨 Troubleshooting
+
+### **Lỗi: `ENOENT: no such file or directory, open '.next/prerender-manifest.json'`**
+
+**Nguyên nhân:** Có `output: 'standalone'` trong `next.config.mjs`
+
+**Giải pháp:**
+```bash
+# 1. Xóa config sai
+# Edit next.config.mjs - remove: output: 'standalone',
+
+# 2. Clean build
+rm -rf .next
+npm run build
+
+# 3. Start lại
+npm run start
+```
+
+### **Lỗi: Export encountered errors on /api/.../route**
+
+**Nguyên nhân:** API routes không thể static export (expected behavior)
+
+**Giải pháp:** Ignore - đây là warnings, không phải errors. App vẫn chạy bình thường.
+
+---
+
+## 📦 Deploy trên VPS
+
+```bash
+# 1. Pull code mới
+cd /var/www/autopost-vn
+git pull
+
+# 2. Clean rebuild
+rm -rf .next node_modules
+npm install
+npm run build
+
+# 3. Check build success
+ls -la .next/server  # Should see folders: app, chunks, pages
+
+# 4. Start app
+npm run start
+
+# 5. Check running
+curl http://localhost:3000
+```
+
+**Expected output:**
+```
+✓ Compiled successfully
+✓ Generating static pages (84/84)
+```
 
 **Zero code changes needed!** 🎊

@@ -25,8 +25,6 @@ const nextConfig = {
       fullUrl: false,
     },
   },
-  // Configure static generation behavior
-  output: 'standalone',
 }
 
 export default withSentryConfig(nextConfig, {
