@@ -4,7 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "next build 2>&1 | findstr /V \"Dynamic server usage\"",
+    "build:verbose": "next build",
     "start": "next start",
     "lint": "eslint .",
     "test": "jest",

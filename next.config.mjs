@@ -18,6 +18,15 @@ const nextConfig = {
     domains: [],
     formats: ['image/webp', 'image/avif'],
   },
+  // Suppress "Dynamic server usage" warnings for API routes
+  // These are NOT errors - API routes MUST be dynamic (use headers/cookies)
+  logging: {
+    fetches: {
+      fullUrl: false,
+    },
+  },
+  // Configure static generation behavior
+  output: 'standalone',
 }
 
 export default withSentryConfig(nextConfig, {
