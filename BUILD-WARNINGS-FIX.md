@@ -19,19 +19,27 @@ because it used `headers`.
 
 ### **Cách fix:**
 
-#### 1. **Suppress warnings trong build script** ✅
+#### 1. **Build script (Cross-platform)** ✅
 **File:** `package.json`
 ```json
 {
   "scripts": {
-    "build": "next build 2>&1 | findstr /V \"Dynamic server usage\"",
+    "build": "next build",
+    "build:clean": "next build 2>&1 | grep -v \"Dynamic server usage\" || next build",
     "build:verbose": "next build"
   }
 }
 ```
 
-- `npm run build` → Build **KHÔNG hiển thị** warnings
+**Commands:**
+- `npm run build` → Build bình thường (có warnings - OK)
+- `npm run build:clean` → Build **KHÔNG hiển thị** warnings (Linux/Mac)
 - `npm run build:verbose` → Build hiển thị **TẤT CẢ** output (debug)
+
+**Lưu ý:** 
+- Default `build` không filter để tương thích cross-platform
+- Dùng `build:clean` nếu muốn clean output trên Linux/Mac
+- Trên Windows: Dùng PowerShell: `npm run build 2>&1 | Select-String -NotMatch "Dynamic"`
 
 #### 2. **Config Next.js**
 **File:** `next.config.mjs`

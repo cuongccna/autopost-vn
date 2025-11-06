@@ -4,7 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build 2>&1 | findstr /V \"Dynamic server usage\"",
+    "build": "next build",
+    "build:clean": "next build 2>&1 | grep -v \"Dynamic server usage\" || next build",
     "build:verbose": "next build",
     "start": "next start",
     "lint": "eslint .",
