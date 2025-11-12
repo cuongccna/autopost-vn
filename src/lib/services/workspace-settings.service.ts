@@ -1,4 +1,4 @@
-import { sbServer } from '@/lib/supabase/server';
+import { query } from '@/lib/db/postgres';
 import logger from '@/lib/utils/logger';
 
 export interface WorkspaceSettings {
@@ -43,18 +43,11 @@ export class WorkspaceSettingsService {
    */
   static async getSettings(workspaceId: string): Promise<WorkspaceSettings> {
     try {
-      const supabase = sbServer();
+      const result = await query(`
+        SELECT settings FROM autopostvn_workspaces WHERE id = $1
+      `, [workspaceId]);
       
-      const { data: workspace, error } = await supabase
-        .from('autopostvn_workspaces')
-        .select('settings')
-        .eq('id', workspaceId)
-        .single();
-      
-      if (error) {
-        logger.error('Failed to fetch workspace settings', { error, workspaceId });
-        return DEFAULT_SETTINGS;
-      }
+      const workspace = result.rows[0];
       
       if (!workspace || !workspace.settings) {
         return DEFAULT_SETTINGS;
@@ -146,29 +139,21 @@ export class WorkspaceSettingsService {
     settings: WorkspaceSettings
   ): Promise<{ allowed: boolean; current: number; limit: number }> {
     try {
-      const supabase = sbServer();
-      
       // Count posts scheduled in the last hour
       const oneHourAgo = new Date();
       oneHourAgo.setHours(oneHourAgo.getHours() - 1);
       
       // Join with posts table to filter by workspace_id
-      const { count, error } = await supabase
-        .from('autopostvn_post_schedules')
-        .select('id, post:autopostvn_posts!inner(workspace_id)', { count: 'exact', head: true })
-        .eq('post.workspace_id', workspaceId)
-        .gte('created_at', oneHourAgo.toISOString())
-        .eq('status', 'published');
+      const result = await query(`
+        SELECT COUNT(*)::int as count
+        FROM autopostvn_post_schedules ps
+        JOIN autopostvn_posts p ON p.id = ps.post_id
+        WHERE p.workspace_id = $1
+          AND ps.created_at >= $2
+          AND ps.status = 'published'
+      `, [workspaceId, oneHourAgo.toISOString()]);
       
-      if (error) {
-        logger.error('Failed to check rate limit', { 
-          error: error.message, 
-          workspaceId 
-        });
-        return { allowed: true, current: 0, limit: settings.scheduling.rateLimit };
-      }
-      
-      const current = count || 0;
+      const current = result.rows[0]?.count || 0;
       const allowed = current < settings.scheduling.rateLimit;
       
       return {

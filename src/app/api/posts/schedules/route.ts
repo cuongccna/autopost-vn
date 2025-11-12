@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
-import { sbServer } from '@/lib/supabase/server'
+import { query } from '@/lib/db/postgres'
 
 export async function GET(request: NextRequest) {
   try {
@@ -10,75 +10,57 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    const userId = (session.user as any).id
     const { searchParams } = new URL(request.url)
     const status = searchParams.get('status') // pending, published, failed, etc.
     const limit = parseInt(searchParams.get('limit') || '50')
 
-    const supabase = sbServer()
+    // Build query with filters
+    let sqlQuery = `
+      SELECT 
+        ps.id,
+        ps.post_id,
+        ps.scheduled_at,
+        ps.status,
+        ps.retry_count,
+        ps.error_message,
+        ps.external_post_id,
+        ps.published_at,
+        ps.created_at,
+        json_build_object(
+          'id', sa.id,
+          'name', sa.platform_name,
+          'provider', sa.provider
+        ) as social_account,
+        json_build_object(
+          'id', p.id,
+          'content', p.content,
+          'media_urls', p.media_urls
+        ) as post
+      FROM autopostvn_post_schedules ps
+      INNER JOIN autopostvn_posts p ON p.id = ps.post_id
+      INNER JOIN autopostvn_social_accounts sa ON sa.id = ps.social_account_id
+      WHERE p.user_id = $1
+    `
     
-    // Get user's workspace
-    const userSlug = `user-${(session.user as any).id.replace(/-/g, '').substring(0, 8)}`
-    const { data: workspace } = await supabase
-      .from('autopostvn_workspaces')
-      .select('id')
-      .eq('slug', userSlug)
-      .single()
-
-    if (!workspace) {
-      return NextResponse.json({ schedules: [] })
-    }
-
-    // Build query
-    let query = supabase
-      .from('autopostvn_post_schedules')
-      .select(`
-        id,
-        post_id,
-        scheduled_at,
-        status,
-        retry_count,
-        error_message,
-        external_post_id,
-        published_at,
-        created_at,
-        social_account:autopostvn_social_accounts(
-          id,
-          name,
-          provider
-        ),
-        post:autopostvn_posts(
-          id,
-          title,
-          content,
-          media_urls
-        )
-      `)
-      .eq('post.workspace_id', workspace.id)
-      .order('scheduled_at', { ascending: false })
-      .limit(limit)
+    const params: any[] = [userId]
+    let paramIndex = 2
 
     if (status) {
-      query = query.eq('status', status)
+      sqlQuery += ` AND ps.status = $${paramIndex}`
+      params.push(status)
+      paramIndex++
     }
 
-    const { data: schedules, error } = await query
+    sqlQuery += ` ORDER BY ps.scheduled_at DESC LIMIT $${paramIndex}`
+    params.push(limit)
 
-    if (error) {
-      console.error('Error fetching schedules:', error)
-      return NextResponse.json(
-        { error: 'Failed to fetch schedules' },
-        { status: 500 }
-      )
-    }
-
-    // Filter out schedules without valid post or social account
-    const validSchedules = schedules?.filter(schedule => 
-      schedule.post && schedule.social_account
-    ) || []
+    const result = await query(sqlQuery, params)
+    const schedules = result.rows
 
     return NextResponse.json({ 
-      schedules: validSchedules,
-      total: validSchedules.length 
+      schedules: schedules,
+      total: schedules.length 
     })
 
   } catch (error) {

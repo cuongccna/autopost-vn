@@ -1,9 +1,5 @@
-import { createClient } from '@supabase/supabase-js';
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-
-const supabase = createClient(supabaseUrl, supabaseServiceKey);
+import { query, insert, update } from '@/lib/db/postgres';
+import { localStorageService } from './localStorageService';
 
 export enum MediaStatus {
   UPLOADED = 'uploaded',
@@ -18,17 +14,10 @@ export enum MediaType {
   VIDEO = 'video'
 }
 
-export interface MediaLifecyclePolicy {
-  archiveAfterDays: number;
-  deleteArchivedAfterDays: number;
-  keepHighEngagement: boolean;
-  engagementThreshold: number;
-}
-
 export interface MediaItem {
   id: string;
   user_id: string;
-  workspace_id: string;
+  workspace_id?: string;
   file_name: string;
   file_type: string;
   file_size: number;
@@ -47,24 +36,39 @@ export interface MediaItem {
   updated_at: string;
 }
 
+export interface MediaLifecyclePolicy {
+  userRole: string;
+  maxStorageGB: number;
+  maxFiles: number;
+  retentionDays: number;
+  autoArchiveDays: number;
+  autoDeleteDays: number;
+}
+
 export const LIFECYCLE_POLICIES: Record<string, MediaLifecyclePolicy> = {
   free: {
-    archiveAfterDays: 30,
-    deleteArchivedAfterDays: 90,
-    keepHighEngagement: true,
-    engagementThreshold: 500,
+    userRole: 'free',
+    maxStorageGB: 1,
+    maxFiles: 100,
+    retentionDays: 30,
+    autoArchiveDays: 7,
+    autoDeleteDays: 30
   },
-  professional: {
-    archiveAfterDays: 90,
-    deleteArchivedAfterDays: 365,
-    keepHighEngagement: true,
-    engagementThreshold: 1000,
+  pro: {
+    userRole: 'pro',
+    maxStorageGB: 10,
+    maxFiles: 1000,
+    retentionDays: 90,
+    autoArchiveDays: 30,
+    autoDeleteDays: 90
   },
   enterprise: {
-    archiveAfterDays: 180,
-    deleteArchivedAfterDays: 0, // Never auto-delete
-    keepHighEngagement: true,
-    engagementThreshold: 0,
+    userRole: 'enterprise',
+    maxStorageGB: 100,
+    maxFiles: 10000,
+    retentionDays: 365,
+    autoArchiveDays: 90,
+    autoDeleteDays: 365
   }
 };
 
@@ -92,44 +96,68 @@ export async function getUserMedia(params: {
     offset = 0
   } = params;
 
-  let query = supabase
-    .from('autopostvn_media')
-    .select('*', { count: 'exact' })
-    .eq('user_id', userId)
-    .neq('status', MediaStatus.DELETED)
-    .order('created_at', { ascending: false })
-    .range(offset, offset + limit - 1);
+  // Build WHERE conditions
+  let whereConditions = ['user_id = $1', "status != 'deleted'"];
+  let paramValues: any[] = [userId];
+  let paramIndex = 2;
 
   if (workspaceId) {
-    query = query.eq('workspace_id', workspaceId);
+    whereConditions.push(`workspace_id = $${paramIndex}`);
+    paramValues.push(workspaceId);
+    paramIndex++;
   }
 
   if (mediaType) {
-    query = query.eq('media_type', mediaType);
+    whereConditions.push(`media_type = $${paramIndex}`);
+    paramValues.push(mediaType);
+    paramIndex++;
   }
 
   if (status) {
-    query = query.eq('status', status);
+    whereConditions.push(`status = $${paramIndex}`);
+    paramValues.push(status);
+    paramIndex++;
   }
 
   if (search) {
-    query = query.ilike('file_name', `%${search}%`);
+    whereConditions.push(`file_name ILIKE $${paramIndex}`);
+    paramValues.push(`%${search}%`);
+    paramIndex++;
   }
 
   if (tags && tags.length > 0) {
-    query = query.contains('tags', tags);
+    whereConditions.push(`tags && $${paramIndex}`);
+    paramValues.push(tags);
+    paramIndex++;
   }
 
-  const { data, error, count } = await query;
+  const whereClause = whereConditions.join(' AND ');
 
-  if (error) {
-    console.error('Get user media error:', error);
-    throw new Error('Failed to fetch media');
-  }
+  // Get total count
+  const countQuery = `
+    SELECT COUNT(*) as total
+    FROM autopostvn_media
+    WHERE ${whereClause}
+  `;
+
+  const countResult = await query(countQuery, paramValues);
+  const total = parseInt(countResult.rows[0].total);
+
+  // Get paginated data
+  const dataQuery = `
+    SELECT *
+    FROM autopostvn_media
+    WHERE ${whereClause}
+    ORDER BY created_at DESC
+    LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
+  `;
+
+  paramValues.push(limit, offset);
+  const dataResult = await query(dataQuery, paramValues);
 
   return {
-    items: data as MediaItem[],
-    total: count || 0,
+    items: dataResult.rows as MediaItem[],
+    total,
     limit,
     offset
   };
@@ -139,19 +167,16 @@ export async function getUserMedia(params: {
  * Get single media item
  */
 export async function getMediaItem(mediaId: string, userId: string) {
-  const { data, error } = await supabase
-    .from('autopostvn_media')
-    .select('*')
-    .eq('id', mediaId)
-    .eq('user_id', userId)
-    .single();
+  const result = await query(
+    'SELECT * FROM autopostvn_media WHERE id = $1 AND user_id = $2 LIMIT 1',
+    [mediaId, userId]
+  );
 
-  if (error) {
-    console.error('Get media item error:', error);
+  if (result.rows.length === 0) {
     throw new Error('Media not found');
   }
 
-  return data as MediaItem;
+  return result.rows[0] as MediaItem;
 }
 
 /**
@@ -180,20 +205,23 @@ export async function updateMediaStatus(
     updateData.deleted_at = new Date().toISOString();
   }
 
-  const { data, error } = await supabase
-    .from('autopostvn_media')
-    .update(updateData)
-    .eq('id', mediaId)
-    .eq('user_id', userId)
-    .select()
-    .single();
+  const updateFields = Object.keys(updateData).map((key, index) => `${key} = $${index + 3}`).join(', ');
+  const values = [mediaId, userId, ...Object.values(updateData)];
 
-  if (error) {
-    console.error('Update media status error:', error);
-    throw new Error('Failed to update media');
+  const updateQuery = `
+    UPDATE autopostvn_media
+    SET ${updateFields}
+    WHERE id = $1 AND user_id = $2
+    RETURNING *
+  `;
+
+  const result = await query(updateQuery, values);
+
+  if (result.rows.length === 0) {
+    throw new Error('Media not found or update failed');
   }
 
-  return data as MediaItem;
+  return result.rows[0] as MediaItem;
 }
 
 /**
@@ -202,73 +230,54 @@ export async function updateMediaStatus(
 export async function updatePlatformUrls(
   mediaId: string,
   userId: string,
-  platform: string,
-  url: string
+  platformUrls: Record<string, string>
 ) {
-  const media = await getMediaItem(mediaId, userId);
-  const platformUrls = { ...media.platform_urls, [platform]: url };
+  const result = await query(
+    'UPDATE autopostvn_media SET platform_urls = $3, updated_at = $4 WHERE id = $1 AND user_id = $2 RETURNING *',
+    [mediaId, userId, JSON.stringify(platformUrls), new Date().toISOString()]
+  );
 
-  return updateMediaStatus(mediaId, userId, MediaStatus.PUBLISHED, {
-    platform_urls: platformUrls
-  });
+  if (result.rows.length === 0) {
+    throw new Error('Media not found or update failed');
+  }
+
+  return result.rows[0];
 }
 
 /**
  * Update engagement score
  */
-export async function updateEngagementScore(
-  mediaId: string,
-  userId: string,
-  score: number
-) {
-  const { data, error } = await supabase
-    .from('autopostvn_media')
-    .update({
-      engagement_score: score,
-      updated_at: new Date().toISOString()
-    })
-    .eq('id', mediaId)
-    .eq('user_id', userId)
-    .select()
-    .single();
+export async function updateEngagementScore(mediaId: string, userId: string, score: number) {
+  const result = await query(
+    'UPDATE autopostvn_media SET engagement_score = $3, updated_at = $4 WHERE id = $1 AND user_id = $2 RETURNING *',
+    [mediaId, userId, score, new Date().toISOString()]
+  );
 
-  if (error) {
-    console.error('Update engagement score error:', error);
-    throw new Error('Failed to update engagement score');
+  if (result.rows.length === 0) {
+    throw new Error('Media not found or update failed');
   }
 
-  return data as MediaItem;
+  return result.rows[0];
 }
 
 /**
- * Add tags to media
+ * Update media tags
  */
-export async function updateMediaTags(
-  mediaId: string,
-  userId: string,
-  tags: string[]
-) {
-  const { data, error } = await supabase
-    .from('autopostvn_media')
-    .update({
-      tags,
-      updated_at: new Date().toISOString()
-    })
-    .eq('id', mediaId)
-    .eq('user_id', userId)
-    .select()
-    .single();
+export async function updateMediaTags(mediaId: string, userId: string, tags: string[]) {
+  const result = await query(
+    'UPDATE autopostvn_media SET tags = $3, updated_at = $4 WHERE id = $1 AND user_id = $2 RETURNING *',
+    [mediaId, userId, tags, new Date().toISOString()]
+  );
 
-  if (error) {
-    console.error('Update media tags error:', error);
-    throw new Error('Failed to update tags');
+  if (result.rows.length === 0) {
+    throw new Error('Media not found or update failed');
   }
 
-  return data as MediaItem;
+  return result.rows[0];
 }
 
 /**
- * Soft delete media (mark as deleted, don't remove from storage yet)
+ * Soft delete media (mark as deleted)
  */
 export async function softDeleteMedia(mediaId: string, userId: string) {
   return updateMediaStatus(mediaId, userId, MediaStatus.DELETED);
@@ -278,150 +287,145 @@ export async function softDeleteMedia(mediaId: string, userId: string) {
  * Hard delete media (remove from storage and database)
  */
 export async function hardDeleteMedia(mediaId: string, userId: string) {
+  // Get media item first
   const media = await getMediaItem(mediaId, userId);
-
-  // Delete from storage
-  const { error: storageError } = await supabase.storage
-    .from('media')
-    .remove([media.storage_path]);
-
-  if (storageError) {
-    console.error('Delete from storage error:', storageError);
-    throw new Error('Failed to delete media from storage');
+  
+  // Delete from local storage
+  try {
+    await localStorageService.deleteFile(media.storage_path);
+  } catch (error) {
+    console.error('Failed to delete from local storage:', error);
+    // Continue with database deletion even if file deletion fails
   }
 
   // Delete from database
-  const { error: dbError } = await supabase
-    .from('autopostvn_media')
-    .delete()
-    .eq('id', mediaId)
-    .eq('user_id', userId);
+  const result = await query(
+    'DELETE FROM autopostvn_media WHERE id = $1 AND user_id = $2 RETURNING *',
+    [mediaId, userId]
+  );
 
-  if (dbError) {
-    console.error('Delete from database error:', dbError);
-    throw new Error('Failed to delete media from database');
+  if (result.rows.length === 0) {
+    throw new Error('Media not found or delete failed');
   }
 
-  return { success: true };
+  return { success: true, deletedMedia: result.rows[0] };
 }
 
 /**
- * Archive old published media
+ * Archive old media based on policy
  */
 export async function archiveOldMedia(policy: MediaLifecyclePolicy) {
   const archiveDate = new Date();
-  archiveDate.setDate(archiveDate.getDate() - policy.archiveAfterDays);
+  archiveDate.setDate(archiveDate.getDate() - policy.autoArchiveDays);
 
-  const { data, error } = await supabase
-    .from('autopostvn_media')
-    .update({
-      status: MediaStatus.ARCHIVED,
-      archived_at: new Date().toISOString()
-    })
-    .eq('status', MediaStatus.PUBLISHED)
-    .lt('published_at', archiveDate.toISOString())
-    .is('archived_at', null)
-    .select();
+  const result = await query(
+    `UPDATE autopostvn_media 
+     SET status = $1, archived_at = $2, updated_at = $2
+     WHERE status = $3 AND created_at < $4
+     RETURNING *`,
+    [MediaStatus.ARCHIVED, new Date().toISOString(), MediaStatus.PUBLISHED, archiveDate.toISOString()]
+  );
 
-  if (error) {
-    console.error('Archive media error:', error);
-    throw new Error('Failed to archive media');
-  }
-
-  return data.length;
+  return result.rows;
 }
 
 /**
- * Delete old archived media
+ * Delete archived media based on policy
  */
 export async function deleteArchivedMedia(policy: MediaLifecyclePolicy) {
-  if (policy.deleteArchivedAfterDays === 0) {
-    return 0; // Don't auto-delete
-  }
-
   const deleteDate = new Date();
-  deleteDate.setDate(deleteDate.getDate() - policy.deleteArchivedAfterDays);
+  deleteDate.setDate(deleteDate.getDate() - policy.autoDeleteDays);
 
-  // Get archived media to delete
-  const { data: mediaToDelete, error: fetchError } = await supabase
-    .from('autopostvn_media')
-    .select('id, user_id, storage_path, engagement_score')
-    .eq('status', MediaStatus.ARCHIVED)
-    .lt('archived_at', deleteDate.toISOString());
+  // Get media to delete from S3
+  const mediaToDelete = await query(
+    'SELECT storage_path FROM autopostvn_media WHERE status = $1 AND archived_at < $2',
+    [MediaStatus.ARCHIVED, deleteDate.toISOString()]
+  );
 
-  if (fetchError) {
-    console.error('Fetch archived media error:', fetchError);
-    throw new Error('Failed to fetch archived media');
-  }
-
-  let deletedCount = 0;
-
-  for (const media of mediaToDelete || []) {
-    // Keep high engagement media
-    if (policy.keepHighEngagement && media.engagement_score >= policy.engagementThreshold) {
-      continue;
-    }
-
+  // Delete from local storage
+  for (const media of mediaToDelete.rows) {
     try {
-      await hardDeleteMedia(media.id, media.user_id);
-      deletedCount++;
+      await localStorageService.deleteFile(media.storage_path);
     } catch (error) {
-      console.error(`Failed to delete media ${media.id}:`, error);
+      console.error('Failed to delete from local storage:', error);
     }
   }
 
-  return deletedCount;
+  // Delete from database
+  const result = await query(
+    'DELETE FROM autopostvn_media WHERE status = $1 AND archived_at < $2 RETURNING *',
+    [MediaStatus.ARCHIVED, deleteDate.toISOString()]
+  );
+
+  return result.rows;
 }
 
 /**
- * Clean up media by user role
+ * Cleanup media by user role limits
  */
 export async function cleanupMediaByUserRole(userRole: string) {
-  const policy = LIFECYCLE_POLICIES[userRole] || LIFECYCLE_POLICIES.free;
+  const policy = LIFECYCLE_POLICIES[userRole];
+  if (!policy) {
+    throw new Error(`Unknown user role: ${userRole}`);
+  }
 
-  const archivedCount = await archiveOldMedia(policy);
-  const deletedCount = await deleteArchivedMedia(policy);
+  // Archive old media
+  const archivedMedia = await archiveOldMedia(policy);
+  
+  // Delete old archived media
+  const deletedMedia = await deleteArchivedMedia(policy);
 
   return {
-    userRole,
-    archivedCount,
-    deletedCount,
+    archived: archivedMedia.length,
+    deleted: deletedMedia.length,
     policy
   };
 }
 
 /**
- * Get media storage stats
+ * Get media statistics for a user
  */
 export async function getMediaStats(userId: string, workspaceId?: string) {
-  let query = supabase
-    .from('autopostvn_media')
-    .select('media_type, file_size, status')
-    .eq('user_id', userId)
-    .neq('status', MediaStatus.DELETED);
+  let whereClause = 'user_id = $1';
+  let params: any[] = [userId];
 
   if (workspaceId) {
-    query = query.eq('workspace_id', workspaceId);
+    whereClause += ' AND workspace_id = $2';
+    params.push(workspaceId);
   }
 
-  const { data, error } = await query;
+  const statsQuery = `
+    SELECT 
+      COUNT(*) as total_files,
+      COUNT(*) FILTER (WHERE status = 'uploaded') as uploaded,
+      COUNT(*) FILTER (WHERE status = 'processing') as processing,
+      COUNT(*) FILTER (WHERE status = 'published') as published,
+      COUNT(*) FILTER (WHERE status = 'archived') as archived,
+      COUNT(*) FILTER (WHERE status = 'deleted') as deleted,
+      COALESCE(SUM(file_size), 0) as total_size_bytes,
+      COUNT(*) FILTER (WHERE media_type = 'image') as images,
+      COUNT(*) FILTER (WHERE media_type = 'video') as videos
+    FROM autopostvn_media
+    WHERE ${whereClause}
+  `;
 
-  if (error) {
-    console.error('Get media stats error:', error);
-    throw new Error('Failed to get media stats');
-  }
+  const result = await query(statsQuery, params);
+  const stats = result.rows[0];
 
-  const stats = {
-    total: data.length,
-    images: data.filter(m => m.media_type === MediaType.IMAGE).length,
-    videos: data.filter(m => m.media_type === MediaType.VIDEO).length,
-    uploaded: data.filter(m => m.status === MediaStatus.UPLOADED).length,
-    published: data.filter(m => m.status === MediaStatus.PUBLISHED).length,
-    archived: data.filter(m => m.status === MediaStatus.ARCHIVED).length,
-    totalSize: data.reduce((sum, m) => sum + (m.file_size || 0), 0),
-    imageSize: data.filter(m => m.media_type === MediaType.IMAGE).reduce((sum, m) => sum + (m.file_size || 0), 0),
-    videoSize: data.filter(m => m.media_type === MediaType.VIDEO).reduce((sum, m) => sum + (m.file_size || 0), 0),
+  return {
+    totalFiles: parseInt(stats.total_files),
+    byStatus: {
+      uploaded: parseInt(stats.uploaded),
+      processing: parseInt(stats.processing),
+      published: parseInt(stats.published),
+      archived: parseInt(stats.archived),
+      deleted: parseInt(stats.deleted)
+    },
+    totalSizeBytes: parseInt(stats.total_size_bytes),
+    totalSizeGB: parseFloat((parseInt(stats.total_size_bytes) / (1024 * 1024 * 1024)).toFixed(2)),
+    byType: {
+      images: parseInt(stats.images),
+      videos: parseInt(stats.videos)
+    }
   };
-
-  return stats;
 }

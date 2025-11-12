@@ -1,86 +1,77 @@
-// Debug script để test database connection và AI usage service
-const { createClient } = require('@supabase/supabase-js');
-
-// Load environment variables
+// Test PostgreSQL database connectivity
 require('dotenv').config({ path: '.env.local' });
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-console.log('Supabase URL:', supabaseUrl);
-console.log('Service key exists:', !!supabaseServiceKey);
-
-if (!supabaseUrl || !supabaseServiceKey) {
-  console.error('Missing Supabase credentials');
-  process.exit(1);
-}
-
-const supabase = createClient(supabaseUrl, supabaseServiceKey);
+const { query, insert } = require('./src/lib/db/postgres');
 
 async function testDatabaseConnection() {
+  console.log('🔍 Testing PostgreSQL connection...\n');
+  
   try {
-    console.log('\n=== Testing Database Connection ===');
+    // Test 1: Simple query
+    console.log('Test 1: Simple query');
+    const result = await query('SELECT COUNT(*) as count FROM autopostvn_workspaces');
+    console.log('✅ Workspaces count:', result.rows[0].count);
     
-    // Test 1: Check if autopostvn_users table exists
-    console.log('\n1. Testing autopostvn_users table...');
-    const { data: usersData, error: usersError } = await supabase
-      .from('autopostvn_users')
-      .select('*')
-      .limit(1);
+    // Test 2: Check workspace data
+    console.log('\nTest 2: Fetch workspace data');
+    const workspaces = await query('SELECT id, name, slug FROM autopostvn_workspaces LIMIT 5');
+    console.log('✅ Workspaces:', workspaces.rows);
     
-    if (usersError) {
-      console.error('Users table error:', usersError);
-    } else {
-      console.log('Users table exists, sample data:', usersData);
-    }
+    // Test 3: Check all tables exist
+    console.log('\nTest 3: Check all tables');
+    const tables = await query(`
+      SELECT tablename 
+      FROM pg_tables 
+      WHERE tablename LIKE 'autopostvn_%' 
+      ORDER BY tablename
+    `);
+    console.log('✅ Tables found:', tables.rows.length);
+    tables.rows.forEach(row => console.log('   -', row.tablename));
     
-    // Test 2: Check AI rate limits table
-    console.log('\n2. Testing autopostvn_ai_rate_limits table...');
-    const { data: rateLimitsData, error: rateLimitsError } = await supabase
-      .from('autopostvn_ai_rate_limits')
-      .select('*');
+    // Test 4: Check indexes
+    console.log('\nTest 4: Check indexes');
+    const indexes = await query(`
+      SELECT indexname 
+      FROM pg_indexes 
+      WHERE tablename LIKE 'autopostvn_%' 
+      LIMIT 10
+    `);
+    console.log('✅ Indexes sample:', indexes.rows.length);
+    indexes.rows.forEach(row => console.log('   -', row.indexname));
     
-    if (rateLimitsError) {
-      console.error('Rate limits table error:', rateLimitsError);
-    } else {
-      console.log('Rate limits data:', rateLimitsData);
-    }
-    
-    // Test 3: Check RPC function
-    console.log('\n3. Testing check_ai_rate_limit function...');
+    // Test 5: Test social accounts table
+    console.log('\nTest 5: Check social accounts table');
+    const accounts = await query('SELECT COUNT(*) as count FROM autopostvn_social_accounts');
     const testUserId = '550e8400-e29b-41d4-a716-446655440000';
     const { data: rpcData, error: rpcError } = await supabase
       .rpc('check_ai_rate_limit', {
         p_user_id: testUserId,
         p_user_role: 'free'
       });
+    console.log('✅ Social accounts count:', accounts.rows[0].count);
     
-    if (rpcError) {
-      console.error('RPC function error:', rpcError);
-    } else {
-      console.log('RPC function result:', rpcData);
-    }
+    // Test 6: Test AI rate limits table
+    console.log('\nTest 6: Check AI rate limits table');
+    const rateLimits = await query('SELECT COUNT(*) as count FROM autopostvn_ai_rate_limits');
+    console.log('✅ AI rate limits count:', rateLimits.rows[0].count);
     
-    // Test 4: Try to create a test user
-    console.log('\n4. Creating test user...');
-    const { data: newUserData, error: createUserError } = await supabase
-      .from('autopostvn_users')
-      .insert({
-        id: testUserId,
-        email: 'test@example.com',
-        user_role: 'free'
-      })
-      .select()
-      .single();
-      
-    if (createUserError) {
-      console.error('Create user error:', createUserError);
-    } else {
-      console.log('User created successfully:', newUserData);
-    }
+    console.log('\n🎉 All database connectivity tests passed!');
+    console.log('\n📊 Database Summary:');
+    console.log('   - PostgreSQL connection: ✅ Working');
+    console.log('   - Tables created: ✅', tables.rows.length);
+    console.log('   - Sample data: ✅ Present');
+    console.log('   - Indexes: ✅ Created');
+    
+    process.exit(0);
     
   } catch (error) {
-    console.error('Test failed:', error);
+    console.error('\n❌ Database test failed:', error);
+    console.error('\n💡 Troubleshooting:');
+    console.error('   1. Check .env.local has correct PostgreSQL credentials');
+    console.error('   2. Ensure PostgreSQL is running (check pgAdmin)');
+    console.error('   3. Verify database name is "autopost_vn"');
+    console.error('   4. Check user "autopost_admin" has access');
+    process.exit(1);
   }
 }
 

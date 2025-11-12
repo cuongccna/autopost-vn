@@ -107,10 +107,10 @@ export default function Activities() {
       <div className="border-b border-gray-200">
         <nav className="-mb-px flex space-x-8">
           {[
-            { id: 'recent', name: 'Gần đây', icon: '🕒', count: null },
+            { id: 'recent', name: 'Gần đây', icon: '🕒', count: Math.min(20, stats?.total_actions || 0) },
             { id: 'all', name: 'Tất cả', icon: '📋', count: stats?.total_actions },
-            { id: 'errors', name: 'Lỗi', icon: '❌', count: null },
-            { id: 'success', name: 'Thành công', icon: '✅', count: null }
+            { id: 'errors', name: 'Lỗi', icon: '❌', count: Math.round((stats?.total_actions || 0) * (1 - (stats?.success_rate || 0) / 100)) },
+            { id: 'success', name: 'Thành công', icon: '✅', count: Math.round((stats?.total_actions || 0) * (stats?.success_rate || 0) / 100) }
           ].map((filter) => (
             <button
               key={filter.id}
@@ -139,18 +139,13 @@ export default function Activities() {
 
       {/* Content */}
       <div className="bg-white rounded-lg border">
-        {activeFilter === 'all' ? (
-          <div className="p-6">
-            <ActivityLogsView showFilters={true} limit={20} />
-          </div>
-        ) : (
-          <div className="p-6">
-            <ActivityLogsView 
-              showFilters={false} 
-              {...getFilterConfig()}
-            />
-          </div>
-        )}
+        <div className="p-6">
+          <ActivityLogsView 
+            showFilters={activeFilter === 'all'} 
+            status={getFilterConfig().status}
+            limit={getFilterConfig().limit}
+          />
+        </div>
       </div>
 
       {/* Category Breakdown */}

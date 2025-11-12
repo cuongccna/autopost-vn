@@ -236,10 +236,23 @@ export default function ComposePage() {
       setSubmissionResult(result);
       setShowSuccessModal(true);
       
-      // Show detailed success message
+      // Show detailed success message based on action type
+      const isScheduled = data.scheduleAt && new Date(data.scheduleAt) > new Date();
+      const actionText = editingPostId 
+        ? 'cập nhật' 
+        : (isScheduled ? 'lên lịch' : 'tạo');
+      
+      const titleText = editingPostId 
+        ? 'Cập nhật thành công!' 
+        : (isScheduled ? 'Lên lịch thành công!' : 'Tạo bài thành công!');
+      
+      const scheduleInfo = isScheduled && data.scheduleAt 
+        ? ` và sẽ được đăng vào ${new Date(data.scheduleAt).toLocaleString('vi-VN')}`
+        : '';
+      
       showToast({
-        title: editingPostId ? 'Cập nhật thành công!' : 'Đăng bài thành công!',
-        message: `Bài viết "${data.title || 'Không có tiêu đề'}" đã được ${editingPostId ? 'cập nhật' : 'tạo'} thành công. ${result.post?.channels?.length || data.channels.length} kênh sẽ được đăng.`,
+        title: titleText,
+        message: `Bài viết "${data.content?.substring(0, 50) || 'Không có tiêu đề'}..." đã được ${actionText} thành công cho ${result.post?.channels?.length || data.channels.length} kênh${scheduleInfo}.`,
         type: 'success',
         duration: 8000 // Show longer
       });
@@ -268,7 +281,7 @@ export default function ComposePage() {
     if (hasChanges) {
       setShowConfirmModal(true);
     } else {
-      router.push('/dashboard');
+      router.push('/app');
     }
   };
 
@@ -323,10 +336,10 @@ export default function ComposePage() {
           <ol className="flex items-center space-x-2">
             <li>
               <button
-                onClick={() => router.push('/dashboard')}
+                onClick={() => router.push('/app')}
                 className="text-gray-500 hover:text-gray-700 text-sm font-medium"
               >
-                Dashboard
+                Ứng Dụng
               </button>
             </li>
             <li className="text-gray-400">/</li>
@@ -474,7 +487,10 @@ export default function ComposePage() {
               </div>
               
               <h3 className="text-lg font-medium text-gray-900 mb-2">
-                {editingPostId ? 'Cập nhật thành công!' : 'Đăng bài thành công!'}
+                {editingPostId ? 'Cập nhật thành công!' : 
+                  (composeData.scheduleAt && new Date(composeData.scheduleAt) > new Date() 
+                    ? 'Lên lịch thành công!' 
+                    : 'Tạo bài thành công!')}
               </h3>
               
               <div className="text-sm text-gray-600 mb-4 space-y-2">
@@ -488,10 +504,10 @@ export default function ComposePage() {
 
               <div className="flex gap-3 justify-center">
                 <button
-                  onClick={() => router.push('/dashboard')}
+                  onClick={() => router.push('/app')}
                   className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
                 >
-                  Về Dashboard
+                  Về Ứng Dụng
                 </button>
                 <button
                   onClick={() => {

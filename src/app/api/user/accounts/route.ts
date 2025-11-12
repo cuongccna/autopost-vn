@@ -75,8 +75,12 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Account ID required' }, { status: 400 });
       }
 
-      const updatedAccount = await userManagementService.refreshAccountToken(accountId);
-      return NextResponse.json({ account: updatedAccount });
+      // TODO: Implement token refresh functionality
+      // const updatedAccount = await userManagementService.refreshAccountToken(accountId);
+      return NextResponse.json({
+        message: 'Token refresh not implemented yet',
+        accountId
+      });
     }
 
     return NextResponse.json({ error: 'Invalid action' }, { status: 400 });

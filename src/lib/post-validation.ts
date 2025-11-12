@@ -1,4 +1,4 @@
-import { sbServer } from '@/lib/supabase/server';
+import { query } from '@/lib/db/postgres';
 
 export interface ValidationResult {
   isValid: boolean;
@@ -16,6 +16,7 @@ export interface PostValidationData {
     providers: string[];
     workspace_id: string;
     user_id: string;
+    status: string;
     metadata?: any;
   };
   schedules: Array<{
@@ -43,20 +44,18 @@ export async function validatePostForPublishing(postId: string): Promise<{
   result: ValidationResult;
   data?: PostValidationData;
 }> {
-  const sb = sbServer(true);
   const errors: string[] = [];
   const warnings: string[] = [];
 
   try {
     // Lấy thông tin bài đăng
-    const { data: post, error: postError } = await sb
-      .from('autopostvn_posts')
-      .select('*')
-      .eq('id', postId)
-      .single();
+    const postResult = await query<PostValidationData['post']>(`
+      SELECT * FROM autopostvn_posts WHERE id = $1
+    `, [postId]);
 
-    if (postError || !post) {
-      errors.push(`Không tìm thấy bài đăng: ${postError?.message || 'Post not found'}`);
+    const post = postResult.rows[0];
+    if (!post) {
+      errors.push(`Không tìm thấy bài đăng: ${postId}`);
       return {
         result: { isValid: false, errors, warnings }
       };
@@ -77,35 +76,29 @@ export async function validatePostForPublishing(postId: string): Promise<{
     }
 
     // Lấy lịch đăng bài - Chấp nhận cả pending và publishing status
-    const { data: schedules, error: schedulesError } = await sb
-      .from('autopostvn_post_schedules')
-      .select('*')
-      .eq('post_id', postId)
-      .in('status', ['pending', 'publishing']);
+    const schedulesResult = await query<PostValidationData['schedules'][0]>(`
+      SELECT * FROM autopostvn_post_schedules
+      WHERE post_id = $1 AND status IN ('pending', 'publishing')
+    `, [postId]);
 
-    if (schedulesError) {
-      errors.push(`Lỗi khi lấy lịch đăng bài: ${schedulesError.message}`);
-      return {
-        result: { isValid: false, errors, warnings }
-      };
-    }
-
+    const schedules = schedulesResult.rows;
     if (!schedules?.length) {
       errors.push('Không có lịch đăng bài nào trong trạng thái pending hoặc publishing');
     }
 
     // Lấy thông tin tài khoản mạng xã hội
-    const accountIds = schedules?.map(s => s.social_account_id) || [];
-    const { data: socialAccounts, error: accountsError } = await sb
-      .from('autopostvn_social_accounts')
-      .select('id, provider, provider_id, name, status, token_encrypted, expires_at, metadata')
-      .in('id', accountIds);
-
-    if (accountsError) {
-      errors.push(`Lỗi khi lấy thông tin tài khoản: ${accountsError.message}`);
-      return {
-        result: { isValid: false, errors, warnings }
-      };
+    const accountIds = schedules?.map((s: any) => s.social_account_id) || [];
+    
+    let socialAccounts: any[] = [];
+    if (accountIds.length > 0) {
+      const accountsResult = await query<PostValidationData['socialAccounts'][0]>(`
+        SELECT id, provider, provider_id, name, status, token_encrypted, 
+               expires_at, metadata
+        FROM autopostvn_social_accounts
+        WHERE id = ANY($1::uuid[])
+      `, [accountIds]);
+      
+      socialAccounts = accountsResult.rows;
     }
 
     // Kiểm tra từng tài khoản
@@ -181,28 +174,32 @@ export async function logValidationActivity(
   result: ValidationResult,
   userId?: string
 ) {
-  const sb = sbServer(true);
-  
   const status = result.isValid ? 'success' : 'failed';
   const description = result.isValid 
     ? 'Kiểm tra bài đăng thành công, sẵn sàng để publish'
     : `Kiểm tra bài đăng thất bại: ${result.errors.join(', ')}`;
 
   try {
-    await sb.from('autopostvn_system_activity_logs').insert({
-      user_id: userId,
-      action_type: 'post_validation',
-      action_category: 'post',
+    await query(`
+      INSERT INTO autopostvn_system_activity_logs (
+        user_id, action_type, action_category, description, status,
+        target_resource_type, target_resource_id, additional_data, created_at
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+    `, [
+      userId,
+      'post_validation',
+      'post',
       description,
       status,
-      target_resource_type: 'post',
-      target_resource_id: postId,
-      additional_data: {
+      'post',
+      postId,
+      JSON.stringify({
         errors: result.errors,
         warnings: result.warnings,
         validation_timestamp: new Date().toISOString()
-      }
-    });
+      })
+    ]);
   } catch (error) {
     console.error('Failed to log validation activity:', error);
   }

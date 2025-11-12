@@ -1,4 +1,4 @@
-import { sbServer } from '@/lib/supabase/server';
+import { db } from '@/lib/db/supabase-compat';
 
 export interface PostUsageStats {
   monthlyUsage: number;
@@ -27,14 +27,11 @@ export async function checkPostRateLimit(
   userRole: string = 'free'
 ): Promise<PostRateLimitResult> {
   try {
-    const supabase = sbServer(true); // Use service role for admin operations
-    
-    // Call the database function to check rate limits
-    const { data, error } = await supabase
-      .rpc('check_post_rate_limit', {
-        p_user_id: userId,
-        p_user_role: userRole
-      });
+    // Call the database function to check rate limits using PostgreSQL
+    const { data, error } = await db.rpc('check_post_rate_limit', {
+      p_user_id: userId,
+      p_user_role: userRole
+    });
 
     if (error) {
       console.error('Error checking post rate limit:', error);
@@ -99,9 +96,7 @@ export async function logPostUsage(
   status: PostStatus = 'draft'
 ): Promise<void> {
   try {
-    const supabase = sbServer(true); // Use service role for admin operations
-    
-    const { error } = await supabase
+    const { error } = await db
       .from('autopostvn_post_usage')
       .insert({
         user_id: userId,
@@ -133,18 +128,19 @@ export async function updatePostStatus(
   publishedAt?: Date
 ): Promise<void> {
   try {
-    const supabase = sbServer(true);
-    
     const updateData: any = { status };
     if (publishedAt && status === 'published') {
       updateData.published_at = publishedAt.toISOString();
     }
     
-    const { error } = await supabase
-      .from('autopostvn_post_usage')
-      .update(updateData)
-      .eq('user_id', userId)
-      .eq('post_id', postId);
+    // Use raw query for updates with multiple conditions
+    const { error } = await db.query(
+      'UPDATE autopostvn_post_usage SET status = $1' + 
+      (publishedAt && status === 'published' ? ', published_at = $2 WHERE user_id = $3 AND post_id = $4' : ' WHERE user_id = $2 AND post_id = $3'),
+      publishedAt && status === 'published' 
+        ? [status, publishedAt.toISOString(), userId, postId]
+        : [status, userId, postId]
+    );
 
     if (error) {
       console.error('Error updating post status:', error);
@@ -164,14 +160,11 @@ export async function getPostUsageStats(
   userRole: string = 'free'
 ): Promise<PostUsageStats> {
   try {
-    const supabase = sbServer(true); // Use service role for admin operations
-    
-    // Call the database function to get usage stats
-    const { data, error } = await supabase
-      .rpc('get_user_post_usage', {
-        p_user_id: userId,
-        p_user_role: userRole
-      });
+    // Call the database function to get usage stats using PostgreSQL
+    const { data, error } = await db.rpc('get_user_post_usage', {
+      p_user_id: userId,
+      p_user_role: userRole
+    });
 
     if (error) {
       console.error('Error getting post usage stats:', error);
@@ -215,17 +208,16 @@ export async function getPostUsageBreakdown(
   timeline: Array<{ date: string; count: number }>;
 }> {
   try {
-    const supabase = sbServer(true);
-    
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - days);
     
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('autopostvn_post_usage')
       .select('platform, post_type, status, created_at')
       .eq('user_id', userId)
       .gte('created_at', startDate.toISOString())
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false })
+      .execute();
 
     if (error) {
       console.error('Error getting post usage breakdown:', error);
@@ -254,7 +246,7 @@ export async function getPostUsageBreakdown(
     };
 
     // Count by categories
-    data?.forEach(post => {
+    data?.forEach((post: any) => {
       if (post.platform in byPlatform) {
         byPlatform[post.platform as PostPlatform]++;
       }
@@ -268,7 +260,7 @@ export async function getPostUsageBreakdown(
 
     // Create timeline (group by day)
     const timelineMap = new Map<string, number>();
-    data?.forEach(post => {
+    data?.forEach((post: any) => {
       const date = new Date(post.created_at).toISOString().split('T')[0];
       timelineMap.set(date, (timelineMap.get(date) || 0) + 1);
     });

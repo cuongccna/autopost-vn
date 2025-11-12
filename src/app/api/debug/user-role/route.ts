@@ -1,15 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  {
-    db: { schema: 'autopostvn' }
-  }
-);
+import { query } from '@/lib/db/postgres';
 
 export async function GET(request: NextRequest) {
   try {
@@ -24,27 +16,35 @@ export async function GET(request: NextRequest) {
     
     console.log('🔍 Checking user role for:', userEmail, 'ID:', userId);
 
-    // Check in users table
-    const { data: users, error: usersError } = await supabase
-      .from('users')
-      .select('*')
-      .eq('id', userId);
+    // Check in autopostvn_users table
+    const usersResult = await query(
+      'SELECT * FROM autopostvn_users WHERE id = $1',
+      [userId]
+    );
+
+    const users = usersResult.rows;
+    const usersError = usersResult.rows.length === 0 ? 'No user found' : null;
 
     console.log('Users query result:', { users, usersError });
 
     // Also check by email
-    const { data: usersByEmail, error: emailError } = await supabase
-      .from('users')
-      .select('*')
-      .eq('email', userEmail);
+    const usersByEmailResult = await query(
+      'SELECT * FROM autopostvn_users WHERE email = $1',
+      [userEmail]
+    );
+
+    const usersByEmail = usersByEmailResult.rows;
+    const emailError = usersByEmailResult.rows.length === 0 ? 'No user found by email' : null;
 
     console.log('Users by email result:', { usersByEmail, emailError });
 
     // Check all users to see what's in the table
-    const { data: allUsers, error: allError } = await supabase
-      .from('users')
-      .select('id, email, role, created_at')
-      .limit(10);
+    const allUsersResult = await query(
+      'SELECT id, email, user_role, created_at FROM autopostvn_users ORDER BY created_at DESC LIMIT 10'
+    );
+
+    const allUsers = allUsersResult.rows;
+    const allError = null;
 
     console.log('All users sample:', { allUsers, allError });
 
@@ -54,8 +54,8 @@ export async function GET(request: NextRequest) {
         email: userEmail,
         name: (session.user as any).name
       },
-      users_table_by_id: users,
-      users_table_by_email: usersByEmail,
+      autopostvn_users_table_by_id: users,
+      autopostvn_users_table_by_email: usersByEmail,
       all_users_sample: allUsers,
       errors: {
         usersError,

@@ -20,18 +20,7 @@ import AddAccountModal from '@/components/features/AddAccountModal';
 import { ToastContainer, useToast } from '@/components/shared/Toast';
 import { useActivityLogger } from '@/hooks/useActivityLogger';
 import { PROVIDERS, mapProvidersToAPI } from '@/lib/constants';
-
-// Types
-interface Post {
-  id: string;
-  title: string;
-  datetime: string;
-  providers: string[];
-  status: 'scheduled' | 'published' | 'failed';
-  content?: string;
-  error?: string;
-  mediaUrls?: string[];
-}
+import type { Post, PostStatus } from '@/types/Post';
 
 const mainTabs = [
   { id: 'calendar', label: 'Lịch' },
@@ -126,17 +115,21 @@ function AppPageContent() {
 
         const data = await response.json();
         
+        // API returns array directly, not { posts: [...] }
+        const postsArray = Array.isArray(data) ? data : (data.posts || []);
+        
         // Convert API posts to UI format
-        const formattedPosts: Post[] = data.posts.map((post: any) => ({
+        const formattedPosts: Post[] = postsArray.map((post: any) => ({
           id: post.id,
-          title: post.title,
+          title: post.content?.substring(0, 50) || 'Untitled', // Use content as title if no title
           datetime: post.scheduled_at || post.created_at,
           providers: post.providers || [],
           status: post.status || 'draft',
           content: post.content,
-          mediaUrls: post.media_urls || [],
+          mediaUrls: post.media_urls || post.media || [],
         }));
         
+        console.log(`✅ Loaded ${formattedPosts.length} posts`);
         setPosts(formattedPosts);
         
       } catch (error) {
@@ -309,23 +302,46 @@ function AppPageContent() {
   const postsByProvider = getPostsByProvider();
   const successRateByProvider = getSuccessRateByProvider();
 
+  // Calculate post statistics by status
+  const totalPosts = posts.length;
+  const scheduledPosts = posts.filter(post => post.status === 'scheduled').length;
+  const publishedPosts = posts.filter(post => post.status === 'published').length;
+  const failedPosts = posts.filter(post => post.status === 'failed').length;
+  const draftPosts = posts.filter(post => post.status === 'draft').length;
+
   const stats = [
     { 
-      label: 'Bài đã lên lịch', 
-      value: posts.length,
+      label: 'Tổng bài viết', 
+      value: totalPosts,
+      subIndicators: [
+        { label: 'Đã đăng', value: publishedPosts },
+        { label: 'Đã lên lịch', value: scheduledPosts },
+        { label: 'Thất bại', value: failedPosts },
+        { label: 'Nháp', value: draftPosts }
+      ]
+    },
+    { 
+      label: 'Đã lên lịch', 
+      value: scheduledPosts,
       subIndicators: Object.entries(postsByProvider).map(([provider, count]) => ({
         label: provider,
         value: count
       }))
     },
     { 
-      label: 'Tỉ lệ thành công', 
-      value: calculateSuccessRate(),
-      progress: posts.length > 0 ? Math.round((posts.filter(post => post.status === 'published').length / posts.length) * 100) : 0,
+      label: 'Đã đăng', 
+      value: publishedPosts,
+      progress: totalPosts > 0 ? Math.round((publishedPosts / totalPosts) * 100) : 0,
       subIndicators: Object.entries(successRateByProvider).map(([provider, rate]) => ({
         label: provider,
         value: rate
       }))
+    },
+    { 
+      label: 'Thất bại', 
+      value: failedPosts,
+      progress: totalPosts > 0 ? Math.round((failedPosts / totalPosts) * 100) : 0,
+      color: failedPosts > 0 ? 'text-red-600' : 'text-gray-600'
     },
     { 
       label: 'Kênh kết nối', 
@@ -734,9 +750,9 @@ function AppPageContent() {
       // Convert UI settings to API format
       const apiSettings = {
         notifications: {
-          success: newSettings.notifySuccess,
-          failure: newSettings.notifyFail,
-          tokenExpiry: newSettings.notifyToken,
+          onSuccess: newSettings.notifySuccess,
+          onFailure: newSettings.notifyFail,
+          onTokenExpiry: newSettings.notifyToken,
         },
         scheduling: {
           timezone: newSettings.timezone,
@@ -745,16 +761,16 @@ function AppPageContent() {
         },
         advanced: {
           autoDeleteOldPosts: newSettings.autoDelete,
-          autoDeleteAfterDays: newSettings.autoDeleteDays,
+          autoDeleteDays: newSettings.autoDeleteDays,
           testMode: newSettings.testMode,
         },
       };
 
-      // Save to API
+      // Save to API - wrap in settings object as expected by server
       const response = await fetch('/api/workspace/settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(apiSettings),
+        body: JSON.stringify({ settings: apiSettings }),
       });
 
       if (!response.ok) {

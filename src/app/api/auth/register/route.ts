@@ -1,10 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+import { query, insert } from '@/lib/db/postgres'
+import bcrypt from 'bcryptjs'
+import { v4 as uuidv4 } from 'uuid'
 
 export async function POST(request: NextRequest) {
   try {
@@ -34,72 +31,65 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Check if user already exists
-    const { data: existingUsers } = await supabase.auth.admin.listUsers()
-    const userExists = existingUsers.users.find(user => user.email === email)
-    if (userExists) {
+    // Check if user already exists in users table
+    const existingUser = await query(
+      'SELECT * FROM autopostvn_users WHERE email = $1 LIMIT 1',
+      [email]
+    )
+    
+    if (existingUser.rows.length > 0) {
       return NextResponse.json(
         { error: 'Email đã được sử dụng' },
         { status: 400 }
       )
     }
 
-    // Create user in Supabase Auth
-    const { data: authData, error: authError } = await supabase.auth.admin.createUser({
-      email,
-      password,
-      email_confirm: true,
-      user_metadata: {
-        full_name: fullName
-      }
-    })
+    // Hash password
+    const hashedPassword = await bcrypt.hash(password, 10)
+    const userId = uuidv4()
 
-    if (authError) {
+    // Create user in users table
+    const userData = {
+      id: userId,
+      email: email,
+      full_name: fullName,
+      password_hash: hashedPassword,
+      user_role: 'free',
+      is_active: true,
+      email_verified: false,
+      created_at: new Date(),
+      updated_at: new Date()
+    }
+
+    const newUser = await insert('autopostvn_users', userData)
+
+    if (!newUser || newUser.length === 0) {
       return NextResponse.json(
-        { error: 'Không thể tạo tài khoản: ' + authError.message },
-        { status: 400 }
+        { error: 'Không thể tạo tài khoản' },
+        { status: 500 }
       )
     }
 
-    // Create user profile
-    const { error: profileError } = await supabase
-      .from('user_profiles')
-      .insert({
-        id: authData.user.id,
-        email: authData.user.email,
-        full_name: fullName,
-        avatar_url: '',
-        created_at: new Date().toISOString()
-      })
-
-    if (profileError) {
-      console.error('Profile creation error:', profileError)
+    // Auto-create default workspace for user
+    const workspaceSlug = email.split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '-')
+    const workspaceData = {
+      user_id: userId,
+      name: `${fullName}'s Workspace`,
+      slug: workspaceSlug,
+      description: 'Workspace mặc định',
+      settings: JSON.stringify({}),
+      created_at: new Date(),
+      updated_at: new Date()
     }
 
-    // Create default workspace for user
-    const { error: workspaceError } = await supabase
-      .from('"AutoPostVN".workspaces')
-      .insert({
-        name: `${fullName}'s Workspace`,
-        slug: email.split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '-'),
-        description: 'Workspace mặc định',
-        settings: {},
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      })
-      .select()
-      .single()
-
-    if (workspaceError) {
-      console.error('Workspace creation error:', workspaceError)
-    }
+    await insert('autopostvn_workspaces', workspaceData)
 
     return NextResponse.json({
       success: true,
-      message: 'Tài khoản đã được tạo thành công',
+      message: 'Tài khoản đã được tạo thành công. Bạn có thể đăng nhập ngay.',
       user: {
-        id: authData.user.id,
-        email: authData.user.email,
+        id: userId,
+        email: email,
         fullName: fullName
       }
     })

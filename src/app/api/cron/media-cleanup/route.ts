@@ -13,27 +13,26 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    console.log('🧹 Starting media cleanup job...');
+    console.log('🧹 Starting media cleanup...');
 
-    const results = {
-      free: await cleanupMediaByUserRole('free'),
-      professional: await cleanupMediaByUserRole('professional'),
-      enterprise: await cleanupMediaByUserRole('enterprise'),
-    };
+    // Clean up media for all user roles
+    const results = await Promise.all([
+      cleanupMediaByUserRole('free'),
+      cleanupMediaByUserRole('pro'),
+      cleanupMediaByUserRole('enterprise')
+    ]);
 
-    const totalArchived = results.free.archivedCount + results.professional.archivedCount + results.enterprise.archivedCount;
-    const totalDeleted = results.free.deletedCount + results.professional.deletedCount + results.enterprise.deletedCount;
+    const totalArchived = results.reduce((sum, result) => sum + result.archived, 0);
+    const totalDeleted = results.reduce((sum, result) => sum + result.deleted, 0);
 
-    console.log(`✅ Cleanup complete: ${totalArchived} archived, ${totalDeleted} deleted`);
+    console.log(`✅ Media cleanup completed: ${totalArchived} archived, ${totalDeleted} deleted`);
 
     return NextResponse.json({
       success: true,
-      results,
-      summary: {
-        totalArchived,
-        totalDeleted,
-        timestamp: new Date().toISOString()
-      }
+      timestamp: new Date().toISOString(),
+      totalArchived,
+      totalDeleted,
+      results
     });
   } catch (error) {
     console.error('❌ Media cleanup error:', error);

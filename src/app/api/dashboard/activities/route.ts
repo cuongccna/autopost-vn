@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
-import { sbServer } from '@/lib/supabase/server';
+import { query } from '@/lib/db/postgres';
 
 export async function GET(request: NextRequest) {
   try {
@@ -23,41 +23,44 @@ export async function GET(request: NextRequest) {
     
     const offset = (page - 1) * limit;
 
-    const supabase = sbServer(true); // Use service role
-
     // Build query with filters
-    let query = supabase
-      .from('autopostvn_system_activity_logs')
-      .select('*', { count: 'exact' })
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false });
+    let sqlQuery = `
+      SELECT * FROM autopostvn_system_activity_logs
+      WHERE user_id = $1
+    `;
+    const params: any[] = [userId];
+    let paramIndex = 2;
 
     // Add type filter if provided
     if (actionType && actionType !== 'all') {
-      query = query.eq('action_type', actionType);
+      sqlQuery += ` AND action_type = $${paramIndex}`;
+      params.push(actionType);
+      paramIndex++;
     }
 
-    // Apply pagination
-    query = query.range(offset, offset + limit - 1);
+    // Get total count for pagination
+    const countQuery = sqlQuery.replace('SELECT *', 'SELECT COUNT(*)');
+    const countResult = await query(countQuery, params);
+    const total = parseInt(countResult.rows[0]?.count || '0');
 
-    const { data: activities, error, count } = await query;
+    // Add ordering and pagination
+    sqlQuery += ` ORDER BY created_at DESC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+    params.push(limit, offset);
 
-    if (error) {
-      console.error('Failed to fetch activities:', error);
-      return NextResponse.json({ error: 'Failed to fetch activities' }, { status: 500 });
-    }
+    const result = await query(sqlQuery, params);
+    const activities = result.rows;
 
     // Format activities for display
-    const formattedActivities = activities?.map(activity => ({
+    const formattedActivities = activities.map(activity => ({
       id: activity.id,
       type: activity.action_type,
       description: getActivityDescription(activity),
       timestamp: activity.created_at,
-      metadata: activity.metadata
-    })) || [];
+      metadata: activity.additional_data
+    }));
 
     // Calculate pagination info
-    const totalPages = Math.ceil((count || 0) / limit);
+    const totalPages = Math.ceil(total / limit);
     const hasNextPage = page < totalPages;
     const hasPrevPage = page > 1;
 
@@ -66,7 +69,7 @@ export async function GET(request: NextRequest) {
       pagination: {
         page,
         limit,
-        total: count || 0,
+        total,
         totalPages,
         hasNextPage,
         hasPrevPage

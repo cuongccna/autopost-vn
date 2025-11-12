@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js';
+import { query, insert } from '@/lib/db/postgres';
 import { 
   CreateActivityLogRequest, 
   SystemActivityLog, 
@@ -6,11 +6,6 @@ import {
   ActivityLogResponse,
   createLogDescription 
 } from '@/types/activity-logs';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
 
 export class ActivityLogService {
   /**
@@ -50,8 +45,8 @@ export class ActivityLogService {
         description,
         target_resource_type: logData.target_resource_type,
         target_resource_id: isValidUUID(logData.target_resource_id) ? logData.target_resource_id : null,
-        previous_data: logData.previous_data || {},
-        new_data: logData.new_data || {},
+        previous_data: JSON.stringify(logData.previous_data || {}),
+        new_data: JSON.stringify(logData.new_data || {}),
         ip_address: context?.ipAddress,
         user_agent: context?.userAgent,
         request_id: context?.requestId,
@@ -59,21 +54,17 @@ export class ActivityLogService {
         status: logData.status || 'success',
         error_message: logData.error_message,
         duration_ms: logData.duration_ms || (Date.now() - startTime),
-        additional_data: logData.additional_data || {},
+        additional_data: JSON.stringify(logData.additional_data || {}),
       };
       
-      const { data, error } = await supabase
-        .from('autopostvn_system_activity_logs')
-        .insert(insertData)
-        .select()
-        .single();
+      const result = await insert('autopostvn_system_activity_logs', insertData);
       
-      if (error) {
-        console.error('Error creating activity log:', error);
+      if (!result || result.length === 0) {
+        console.error('Error creating activity log: No data returned');
         return null;
       }
       
-      return data;
+      return result[0] as SystemActivityLog;
     } catch (error) {
       console.error('Activity log service error:', error);
       return null;
@@ -84,65 +75,81 @@ export class ActivityLogService {
    * Lấy nhật ký hoạt động của người dùng
    */
   static async getUserLogs(
-    userId: string, 
+    userId: string,
     filters: ActivityLogFilters = {}
   ): Promise<ActivityLogResponse> {
     try {
-      let query = supabase
-        .from('autopostvn_system_activity_logs')
-        .select('*', { count: 'exact' })
-        .eq('user_id', userId)
-        .order('created_at', { ascending: false });
+      // Build WHERE clause
+      let whereClause = 'user_id = $1';
+      const params: any[] = [userId];
+      let paramCount = 1;
       
-      // Apply filters
       if (filters.action_category) {
-        query = query.eq('action_category', filters.action_category);
+        paramCount++;
+        whereClause += ` AND action_category = $${paramCount}`;
+        params.push(filters.action_category);
       }
       
       if (filters.action_type) {
-        query = query.eq('action_type', filters.action_type);
+        paramCount++;
+        whereClause += ` AND action_type = $${paramCount}`;
+        params.push(filters.action_type);
       }
       
       if (filters.status) {
-        query = query.eq('status', filters.status);
+        paramCount++;
+        whereClause += ` AND status = $${paramCount}`;
+        params.push(filters.status);
       }
       
       if (filters.target_resource_type) {
-        query = query.eq('target_resource_type', filters.target_resource_type);
+        paramCount++;
+        whereClause += ` AND target_resource_type = $${paramCount}`;
+        params.push(filters.target_resource_type);
       }
       
       if (filters.date_from) {
-        query = query.gte('created_at', filters.date_from);
+        paramCount++;
+        whereClause += ` AND created_at >= $${paramCount}`;
+        params.push(filters.date_from);
       }
       
       if (filters.date_to) {
-        query = query.lte('created_at', filters.date_to);
+        paramCount++;
+        whereClause += ` AND created_at <= $${paramCount}`;
+        params.push(filters.date_to);
       }
+      
+      // Get total count
+      const countResult = await query(
+        `SELECT COUNT(*) as total FROM autopostvn_system_activity_logs WHERE ${whereClause}`,
+        params
+      );
+      const total = parseInt(countResult.rows[0]?.total || '0');
       
       // Pagination
       const limit = filters.limit || 50;
       const offset = filters.offset || 0;
       
-      query = query.range(offset, offset + limit - 1);
-      
-      const { data, error, count } = await query;
-      
-      if (error) {
-        throw error;
-      }
+      // Get data
+      const dataResult = await query(
+        `SELECT * FROM autopostvn_system_activity_logs 
+         WHERE ${whereClause} 
+         ORDER BY created_at DESC 
+         LIMIT $${paramCount + 1} OFFSET $${paramCount + 2}`,
+        [...params, limit, offset]
+      );
       
       return {
-        logs: data || [],
-        total: count || 0,
-        has_more: (count || 0) > offset + limit,
+        logs: dataResult.rows || [],
+        total,
+        has_more: total > offset + limit,
       };
     } catch (error) {
       console.error('Error fetching user logs:', error);
       return { logs: [], total: 0, has_more: false };
     }
-  }
-  
-  /**
+  }  /**
    * Lấy nhật ký hoạt động của workspace
    */
   static async getWorkspaceLogs(
@@ -150,60 +157,92 @@ export class ActivityLogService {
     filters: ActivityLogFilters = {}
   ): Promise<ActivityLogResponse> {
     try {
-      let query = supabase
-        .from('autopostvn_system_activity_logs')
-        .select(`
-          *,
-          user:autopostvn_user_profiles!user_id(
-            full_name,
-            email,
-            avatar_url
-          )
-        `, { count: 'exact' })
-        .eq('workspace_id', workspaceId)
-        .order('created_at', { ascending: false });
-      
-      // Apply same filters as getUserLogs
+      // Build WHERE conditions
+      let whereConditions = ['workspace_id = $1'];
+      let paramValues: any[] = [workspaceId];
+      let paramIndex = 2;
+
       if (filters.action_category) {
-        query = query.eq('action_category', filters.action_category);
+        whereConditions.push(`action_category = $${paramIndex}`);
+        paramValues.push(filters.action_category);
+        paramIndex++;
       }
-      
+
       if (filters.action_type) {
-        query = query.eq('action_type', filters.action_type);
+        whereConditions.push(`action_type = $${paramIndex}`);
+        paramValues.push(filters.action_type);
+        paramIndex++;
       }
-      
+
       if (filters.status) {
-        query = query.eq('status', filters.status);
+        whereConditions.push(`status = $${paramIndex}`);
+        paramValues.push(filters.status);
+        paramIndex++;
       }
-      
+
       if (filters.target_resource_type) {
-        query = query.eq('target_resource_type', filters.target_resource_type);
+        whereConditions.push(`target_resource_type = $${paramIndex}`);
+        paramValues.push(filters.target_resource_type);
+        paramIndex++;
       }
-      
+
       if (filters.date_from) {
-        query = query.gte('created_at', filters.date_from);
+        whereConditions.push(`created_at >= $${paramIndex}`);
+        paramValues.push(filters.date_from);
+        paramIndex++;
       }
-      
+
       if (filters.date_to) {
-        query = query.lte('created_at', filters.date_to);
+        whereConditions.push(`created_at <= $${paramIndex}`);
+        paramValues.push(filters.date_to);
+        paramIndex++;
       }
-      
+
       // Pagination
       const limit = filters.limit || 50;
       const offset = filters.offset || 0;
-      
-      query = query.range(offset, offset + limit - 1);
-      
-      const { data, error, count } = await query;
-      
-      if (error) {
-        throw error;
-      }
-      
+
+      // First, get total count
+      const countQuery = `
+        SELECT COUNT(*) as total
+        FROM autopostvn_system_activity_logs
+        WHERE ${whereConditions.join(' AND ')}
+      `;
+
+      const countResult = await query(countQuery, paramValues);
+      const total = parseInt(countResult.rows[0].total);
+
+      // Then get paginated data with user info
+      const dataQuery = `
+        SELECT
+          l.*,
+          u.full_name,
+          u.email,
+          u.avatar_url
+        FROM autopostvn_system_activity_logs l
+        LEFT JOIN autopostvn_users u ON l.user_id = u.id
+        WHERE ${whereConditions.join(' AND ')}
+        ORDER BY l.created_at DESC
+        LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
+      `;
+
+      paramValues.push(limit, offset);
+      const dataResult = await query(dataQuery, paramValues);
+
+      // Transform data to match expected format
+      const logs = dataResult.rows.map(row => ({
+        ...row,
+        user: row.full_name || row.email ? {
+          full_name: row.full_name,
+          email: row.email,
+          avatar_url: row.avatar_url
+        } : null
+      }));
+
       return {
-        logs: data || [],
-        total: count || 0,
-        has_more: (count || 0) > offset + limit,
+        logs,
+        total,
+        has_more: total > offset + limit,
       };
     } catch (error) {
       console.error('Error fetching workspace logs:', error);
@@ -218,18 +257,13 @@ export class ActivityLogService {
     try {
       const cutoffDate = new Date();
       cutoffDate.setDate(cutoffDate.getDate() - olderThanDays);
-      
-      const { data, error } = await supabase
-        .from('autopostvn_system_activity_logs')
-        .delete()
-        .lt('created_at', cutoffDate.toISOString())
-        .select('id');
-      
-      if (error) {
-        throw error;
-      }
-      
-      return data?.length || 0;
+
+      const result = await query(
+        'DELETE FROM autopostvn_system_activity_logs WHERE created_at < $1',
+        [cutoffDate.toISOString()]
+      );
+
+      return result.rowCount || 0;
     } catch (error) {
       console.error('Error cleaning up old logs:', error);
       return 0;
@@ -252,59 +286,68 @@ export class ActivityLogService {
     try {
       const startDate = new Date();
       startDate.setDate(startDate.getDate() - days);
-      
-      let query = supabase
-        .from('autopostvn_system_activity_logs')
-        .select('action_category, status, created_at')
-        .eq('user_id', userId)
-        .gte('created_at', startDate.toISOString());
-        
+
+      // Build base query
+      let whereConditions = ['user_id = $1', 'created_at >= $2'];
+      let paramValues: any[] = [userId, startDate.toISOString()];
+
       if (workspaceId) {
-        query = query.eq('workspace_id', workspaceId);
+        whereConditions.push('workspace_id = $3');
+        paramValues.push(workspaceId);
       }
-      
-      const { data, error } = await query;
-      
-      if (error) {
-        throw error;
-      }
-      
-      if (!data) {
-        return {
-          total_actions: 0,
-          success_rate: 0,
-          by_category: {},
-          by_day: [],
-        };
-      }
-      
-      const totalActions = data.length;
-      const successCount = data.filter((log: any) => log.status === 'success').length;
+
+      const whereClause = whereConditions.join(' AND ');
+
+      // Get total actions and success count in one query
+      const statsQuery = `
+        SELECT
+          COUNT(*) as total_actions,
+          COUNT(*) FILTER (WHERE status = 'success') as success_count
+        FROM autopostvn_system_activity_logs
+        WHERE ${whereClause}
+      `;
+
+      const statsResult = await query(statsQuery, paramValues);
+      const totalActions = parseInt(statsResult.rows[0].total_actions);
+      const successCount = parseInt(statsResult.rows[0].success_count);
       const successRate = totalActions > 0 ? (successCount / totalActions) * 100 : 0;
-      
-      // Group by category
-      const byCategory = data.reduce((acc: Record<string, number>, log: any) => {
-        acc[log.action_category] = (acc[log.action_category] || 0) + 1;
+
+      // Get category breakdown
+      const categoryQuery = `
+        SELECT action_category, COUNT(*) as count
+        FROM autopostvn_system_activity_logs
+        WHERE ${whereClause}
+        GROUP BY action_category
+      `;
+
+      const categoryResult = await query(categoryQuery, paramValues);
+      const byCategory = categoryResult.rows.reduce((acc: Record<string, number>, row: any) => {
+        acc[row.action_category] = parseInt(row.count);
         return acc;
-      }, {} as Record<string, number>);
-      
-      // Group by day
-      const byDay = data.reduce((acc: Array<{ date: string; count: number }>, log: any) => {
-        const date = new Date(log.created_at).toISOString().split('T')[0];
-        const existing = acc.find((item: any) => item.date === date);
-        if (existing) {
-          existing.count++;
-        } else {
-          acc.push({ date, count: 1 });
-        }
-        return acc;
-      }, [] as Array<{ date: string; count: number }>);
-      
+      }, {});
+
+      // Get daily breakdown
+      const dailyQuery = `
+        SELECT
+          DATE(created_at) as date,
+          COUNT(*) as count
+        FROM autopostvn_system_activity_logs
+        WHERE ${whereClause}
+        GROUP BY DATE(created_at)
+        ORDER BY DATE(created_at)
+      `;
+
+      const dailyResult = await query(dailyQuery, paramValues);
+      const byDay = dailyResult.rows.map((row: any) => ({
+        date: row.date.toISOString().split('T')[0],
+        count: parseInt(row.count)
+      }));
+
       return {
         total_actions: totalActions,
         success_rate: Number(successRate.toFixed(2)),
         by_category: byCategory,
-        by_day: byDay.sort((a: any, b: any) => a.date.localeCompare(b.date)),
+        by_day: byDay,
       };
     } catch (error) {
       console.error('Error getting activity stats:', error);

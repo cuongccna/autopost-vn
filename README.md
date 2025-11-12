@@ -30,18 +30,40 @@ cp .env.example .env.local
 ```
 
 Cập nhật các biến trong `.env.local`:
-- `NEXT_PUBLIC_SUPABASE_URL`: URL của Supabase project
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY`: Anon key từ Supabase
-- `SUPABASE_SERVICE_ROLE_KEY`: Service role key từ Supabase
+**Database (PostgreSQL):**
+- `POSTGRES_HOST`: Host của PostgreSQL server
+- `POSTGRES_PORT`: Port PostgreSQL (default: 5432)
+- `POSTGRES_DATABASE`: Tên database
+- `POSTGRES_USER`: Username PostgreSQL
+- `POSTGRES_PASSWORD`: Password PostgreSQL
+
+**Storage (Local Files):**
+- Files được lưu trữ trong thư mục `public/uploads/`
+- Không cần cấu hình thêm cho VPS deployment
+- Tự động tạo thư mục con theo loại file (images, videos, documents)
+
+**Email (SMTP):**
+- `SMTP_HOST`: SMTP server host
+- `SMTP_PORT`: SMTP port (587 hoặc 465)
+- `SMTP_USER`: SMTP username/email
+- `SMTP_PASS`: SMTP password
+- `SMTP_FROM`: Email gửi từ
+
+**Authentication:**
 - `NEXTAUTH_SECRET`: Secret key cho NextAuth (tối thiểu 32 ký tự)
 - `NEXTAUTH_URL`: URL của ứng dụng (http://localhost:3000 cho dev)
- - `DEBUG_API_ENABLED`: `true/false` để bật/tắt các debug API (mặc định nên để `false`)
+- `JWT_SECRET`: Secret key cho JWT tokens
 
-4. Setup Supabase Database:
-```sql
--- Chạy script trong supabase/schema.sql
--- Tạo custom schema "AutoPostVN" và các bảng cần thiết
+**Debug:**
+- `DEBUG_API_ENABLED`: `true/false` để bật/tắt các debug API (mặc định nên để `false`)
+
+4. Setup PostgreSQL Database:
+```bash
+-- Chạy script để tạo database schema
+psql -h $POSTGRES_HOST -U $POSTGRES_USER -d $POSTGRES_DATABASE -f database/schema-postgres.sql
 ```
+
+Hoặc copy và chạy nội dung file `database/schema-postgres.sql` trong PostgreSQL client.
 
 5. Chạy development server:
 ```bash

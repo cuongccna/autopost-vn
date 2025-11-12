@@ -1,12 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+import { query, update } from '@/lib/db/postgres';
+import bcrypt from 'bcryptjs';
 
 export async function POST(request: NextRequest) {
   try {
@@ -17,59 +13,70 @@ export async function POST(request: NextRequest) {
 
     const userId = (session.user as any).id;
     const body = await request.json();
-    
+
     const { currentPassword, newPassword } = body;
 
     if (!currentPassword || !newPassword) {
       return NextResponse.json(
-        { error: 'Current password and new password are required' },
+        { error: 'Mật khẩu hiện tại và mật khẩu mới là bắt buộc' },
         { status: 400 }
       );
     }
 
     if (newPassword.length < 6) {
       return NextResponse.json(
-        { error: 'New password must be at least 6 characters long' },
+        { error: 'Mật khẩu mới phải có ít nhất 6 ký tự' },
         { status: 400 }
       );
     }
 
-    // Verify current password by attempting to sign in
-    const { error: signInError } = await supabase.auth.signInWithPassword({
-      email: session.user.email!,
-      password: currentPassword
-    });
-
-    if (signInError) {
-      return NextResponse.json(
-        { error: 'Current password is incorrect' },
-        { status: 400 }
-      );
-    }
-
-    // Update password using admin API
-    const { error: updateError } = await supabase.auth.admin.updateUserById(
-      userId,
-      { password: newPassword }
+    // Get user with current password hash
+    const userResult = await query(
+      'SELECT id, password_hash FROM autopostvn_users WHERE id = $1 LIMIT 1',
+      [userId]
     );
 
-    if (updateError) {
-      console.error('Error updating password:', updateError);
+    if (userResult.rows.length === 0) {
       return NextResponse.json(
-        { error: 'Failed to update password' },
-        { status: 500 }
+        { error: 'Người dùng không tồn tại' },
+        { status: 404 }
       );
     }
+
+    const user = userResult.rows[0];
+
+    // Verify current password
+    const isCurrentPasswordValid = await bcrypt.compare(currentPassword, user.password_hash);
+    if (!isCurrentPasswordValid) {
+      return NextResponse.json(
+        { error: 'Mật khẩu hiện tại không đúng' },
+        { status: 400 }
+      );
+    }
+
+    // Hash new password
+    const saltRounds = 12;
+    const newPasswordHash = await bcrypt.hash(newPassword, saltRounds);
+
+    // Update password
+    await update(
+      'autopostvn_users',
+      {
+        password_hash: newPasswordHash,
+        updated_at: new Date().toISOString()
+      },
+      { id: userId }
+    );
 
     return NextResponse.json({
       success: true,
-      message: 'Password updated successfully'
+      message: 'Mật khẩu đã được cập nhật thành công'
     });
 
   } catch (error) {
     console.error('Change password API error:', error);
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: 'Lỗi server, vui lòng thử lại sau' },
       { status: 500 }
     );
   }

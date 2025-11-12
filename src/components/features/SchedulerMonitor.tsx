@@ -199,7 +199,7 @@ export default function SchedulerMonitor() {
               </div>
             </div>
             
-            {testResult.details.length > 0 && (
+            {testResult.details && testResult.details.length > 0 && (
               <div className="space-y-2">
                 <h4 className="font-medium text-gray-800">Chi tiết:</h4>
                 {testResult.details.map((detail, index) => (

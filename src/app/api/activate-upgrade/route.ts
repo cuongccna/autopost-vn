@@ -1,7 +1,7 @@
-import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 import jwt from 'jsonwebtoken';
-import { sendUpgradeConfirmationToUser } from '@/lib/email/resend';
+import { update } from '@/lib/db/postgres';
+import { emailService } from '@/lib/services/emailService';
 
 export async function GET(request: Request) {
   try {
@@ -76,19 +76,25 @@ export async function GET(request: Request) {
     const { userId, authUserId, targetPlan, email } = decoded;
 
     // Update user role in database
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    );
-    
-    const { data: updatedUser, error: updateError } = await supabase
-      .from('autopostvn_users')
-      .update({ user_role: targetPlan })
-      .eq('id', userId)
-      .select('id, email, full_name, user_role')
-      .single();
+    let updatedUser;
+    try {
+      const updatedUsers = await update(
+        'autopostvn_users',
+        {
+          user_role: targetPlan,
+          subscription_status: 'active',
+          subscription_expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), // 30 days
+          updated_at: new Date().toISOString()
+        },
+        { id: userId }
+      );
 
-    if (updateError || !updatedUser) {
+      if (updatedUsers.length === 0) {
+        throw new Error('User not found or update failed');
+      }
+
+      updatedUser = updatedUsers[0];
+    } catch (updateError) {
       console.error('Failed to update user role:', updateError);
       return new NextResponse(
         `
@@ -120,11 +126,11 @@ export async function GET(request: Request) {
     }
 
     // Send confirmation email to user
-    await sendUpgradeConfirmationToUser({
-      userName: updatedUser.full_name || updatedUser.email,
-      userEmail: updatedUser.email,
-      plan: targetPlan
-    });
+    await emailService.sendUpgradeConfirmationEmail(
+      updatedUser.email,
+      updatedUser.full_name || updatedUser.email,
+      targetPlan as 'professional' | 'enterprise'
+    );
 
     // Return success page
     return new NextResponse(

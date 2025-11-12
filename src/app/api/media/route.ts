@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
+import { localStorageService } from '@/lib/services/localStorageService';
+import { insert } from '@/lib/db/postgres';
+import { v4 as uuidv4 } from 'uuid';
 import {
   getUserMedia,
   getMediaItem,
@@ -12,6 +15,149 @@ import {
   MediaStatus,
   MediaType
 } from '@/lib/services/media-lifecycle.service';
+
+/**
+ * POST /api/media - Upload media files using local storage
+ */
+export async function POST(request: NextRequest) {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const userId = (session.user as any).id;
+    const formData = await request.formData();
+    const files = formData.getAll('files') as File[];
+    const workspaceId = formData.get('workspaceId') as string;
+
+    if (!files || files.length === 0) {
+      return NextResponse.json(
+        { error: 'No files provided' },
+        { status: 400 }
+      );
+    }
+
+    const uploadResults = [];
+    const MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10MB
+    const MAX_VIDEO_SIZE = 100 * 1024 * 1024; // 100MB
+    const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+    const ALLOWED_VIDEO_TYPES = ['video/mp4', 'video/quicktime', 'video/x-msvideo'];
+
+    for (const file of files) {
+      try {
+        // Validate file type
+        const isImage = ALLOWED_IMAGE_TYPES.includes(file.type);
+        const isVideo = ALLOWED_VIDEO_TYPES.includes(file.type);
+
+        if (!isImage && !isVideo) {
+          uploadResults.push({
+            fileName: file.name,
+            success: false,
+            error: 'Invalid file type. Allowed: images (jpg, png, gif, webp) and videos (mp4, mov, avi)'
+          });
+          continue;
+        }
+
+        // Validate file size
+        const maxSize = isImage ? MAX_IMAGE_SIZE : MAX_VIDEO_SIZE;
+        if (file.size > maxSize) {
+          uploadResults.push({
+            fileName: file.name,
+            success: false,
+            error: `File too large. Maximum size: ${isImage ? '10MB' : '100MB'}`
+          });
+          continue;
+        }
+
+        // Convert File to Buffer
+        const arrayBuffer = await file.arrayBuffer();
+        const buffer = Buffer.from(arrayBuffer);
+
+        // Upload to local storage
+        let uploadResult;
+        try {
+          uploadResult = await localStorageService.uploadFile(
+            buffer,
+            file.name,
+            file.type,
+            {
+              userId,
+              workspaceId: workspaceId || undefined
+            }
+          );
+        } catch (uploadError) {
+          uploadResults.push({
+            fileName: file.name,
+            success: false,
+            error: uploadError instanceof Error ? uploadError.message : 'Upload failed'
+          });
+          continue;
+        }
+
+        const publicUrl = uploadResult.url;
+        const mediaType = isImage ? 'image' : 'video';
+
+        // Save to database
+        let mediaRecord;
+        try {
+          const mediaRecords = await insert('autopostvn_media', {
+            user_id: userId,
+            workspace_id: workspaceId,
+            file_name: file.name,
+            file_path: uploadResult.path,
+            file_type: file.type,
+            file_size: uploadResult.size,
+            media_type: mediaType,
+            storage_path: uploadResult.path,
+            public_url: publicUrl,
+            status: 'uploaded',
+            metadata: {
+              original_name: file.name,
+              uploaded_at: new Date().toISOString(),
+              storage_type: 'local',
+              content_type: file.type,
+            },
+          });
+          mediaRecord = mediaRecords[0];
+        } catch (dbError) {
+          console.error('Failed to save media record:', dbError);
+          // Continue without failing the upload
+        }
+
+        uploadResults.push({
+          fileName: file.name,
+          success: true,
+          mediaId: mediaRecord?.id,
+          publicUrl: publicUrl,
+          mediaType
+        });
+
+      } catch (error) {
+        console.error('Upload error for file:', file.name, error);
+        uploadResults.push({
+          fileName: file.name,
+          success: false,
+          error: error instanceof Error ? error.message : 'Upload failed'
+        });
+      }
+    }
+
+    return NextResponse.json({
+      success: true,
+      results: uploadResults,
+      totalFiles: files.length,
+      successCount: uploadResults.filter(r => r.success).length
+    });
+
+  } catch (error) {
+    console.error('POST media error:', error);
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Failed to upload media' },
+      { status: 500 }
+    );
+  }
+}
 
 /**
  * GET /api/media - List user's media with filters

@@ -3,17 +3,7 @@
 import { useState } from 'react';
 import { PROVIDERS } from '@/lib/constants';
 import ConfirmDialog from '@/components/shared/ConfirmDialog';
-
-interface Post {
-  id: string;
-  title: string;
-  datetime: string;
-  providers: string[];
-  status: 'scheduled' | 'published' | 'failed';
-  content?: string;
-  error?: string;
-  mediaUrls?: string[];
-}
+import type { Post } from '@/types/Post';
 
 interface PostDetailModalProps {
   post: Post | null;
@@ -55,6 +45,7 @@ export default function PostDetailModal({
   };
 
   const getStatusInfo = (status: string) => {
+    console.log('[PostDetailModal] Checking status:', { status, type: typeof status, raw: JSON.stringify(status) });
     switch (status) {
       case 'scheduled':
         return { label: 'Đã lên lịch', color: 'bg-blue-100 text-blue-800', icon: '⏰' };
@@ -62,7 +53,10 @@ export default function PostDetailModal({
         return { label: 'Đã đăng', color: 'bg-green-100 text-green-800', icon: '✅' };
       case 'failed':
         return { label: 'Thất bại', color: 'bg-red-100 text-red-800', icon: '❌' };
+      case 'draft':
+        return { label: 'Bản nháp', color: 'bg-gray-100 text-gray-800', icon: '📝' };
       default:
+        console.warn('[PostDetailModal] Unknown status, falling back to default:', status);
         return { label: 'Không xác định', color: 'bg-gray-100 text-gray-800', icon: '❓' };
     }
   };
@@ -191,17 +185,17 @@ export default function PostDetailModal({
           )}
 
           {/* Reschedule section */}
-          {post.status === 'scheduled' && (
+          {(post.status === 'scheduled' || post.status === 'published' || post.status === 'draft') && (
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Thay đổi thời gian
+                {post.status === 'published' ? 'Đăng lại vào thời gian khác' : 'Thay đổi thời gian'}
               </label>
               {!isEditing ? (
                 <button
                   onClick={() => setIsEditing(true)}
                   className="px-4 py-2 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors"
                 >
-                  📅 Lên lịch lại
+                  📅 {post.status === 'published' ? 'Đăng lại' : 'Lên lịch lại'}
                 </button>
               ) : (
                 <div className="flex gap-2">

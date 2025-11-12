@@ -138,17 +138,28 @@ export const UserAvatarDropdown: React.FC = () => {
                     {session.user?.email}
                   </p>
                   <div className="flex items-center space-x-2 mt-1">
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${roleInfo.badge}`}>
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${roleInfo.badge} flex items-center gap-1`}>
+                      <RoleIcon className="w-3 h-3" />
                       {roleInfo.name}
                     </span>
-                    {userRole !== 'enterprise' && (
+                    {userRole === 'free' && (
                       <Link 
                         href="/pricing"
-                        className="text-yellow-600 hover:text-yellow-700 text-xs flex items-center space-x-1"
+                        className="text-blue-600 hover:text-blue-700 text-xs flex items-center space-x-1 font-medium"
                         onClick={() => setIsOpen(false)}
                       >
                         <Star className="w-3 h-3" />
                         <span>Nâng cấp</span>
+                      </Link>
+                    )}
+                    {userRole === 'professional' && (
+                      <Link 
+                        href="/pricing"
+                        className="text-purple-600 hover:text-purple-700 text-xs flex items-center space-x-1 font-medium"
+                        onClick={() => setIsOpen(false)}
+                      >
+                        <Gem className="w-3 h-3" />
+                        <span>Enterprise</span>
                       </Link>
                     )}
                   </div>
@@ -180,18 +191,44 @@ export const UserAvatarDropdown: React.FC = () => {
                 <span>Cài đặt</span>
               </Link>
 
-              {/* Upgrade (if not enterprise) */}
-              {userRole !== 'enterprise' && (
+              {/* Upgrade (show different options based on role) */}
+              {userRole === 'free' && (
                 <Link
                   href="/pricing"
                   onClick={() => setIsOpen(false)}
-                  className="w-full px-4 py-2 text-left hover:bg-gray-50 flex items-center space-x-3 text-yellow-600 hover:text-yellow-700 transition-colors"
+                  className="w-full px-4 py-2 text-left hover:bg-gradient-to-r hover:from-blue-50 hover:to-purple-50 flex items-center space-x-3 text-blue-600 hover:text-blue-700 transition-all border-t border-b border-gray-100 my-1"
                 >
                   <Zap className="w-4 h-4" />
-                  <span>
-                    {userRole === 'free' ? 'Nâng cấp lên Pro' : 'Nâng cấp lên Enterprise'}
-                  </span>
+                  <div className="flex-1">
+                    <div className="font-medium">Nâng cấp lên Professional</div>
+                    <div className="text-xs text-gray-500">Mở khóa tất cả tính năng</div>
+                  </div>
                 </Link>
+              )}
+
+              {userRole === 'professional' && (
+                <Link
+                  href="/pricing"
+                  onClick={() => setIsOpen(false)}
+                  className="w-full px-4 py-2 text-left hover:bg-gradient-to-r hover:from-purple-50 hover:to-pink-50 flex items-center space-x-3 text-purple-600 hover:text-purple-700 transition-all border-t border-b border-gray-100 my-1"
+                >
+                  <Gem className="w-4 h-4" />
+                  <div className="flex-1">
+                    <div className="font-medium">Nâng cấp lên Enterprise</div>
+                    <div className="text-xs text-gray-500">Dành cho doanh nghiệp</div>
+                  </div>
+                </Link>
+              )}
+
+              {/* Enterprise users - show premium badge instead */}
+              {userRole === 'enterprise' && (
+                <div className="w-full px-4 py-2 flex items-center space-x-3 border-t border-b border-gray-100 my-1 bg-gradient-to-r from-purple-50 to-pink-50">
+                  <Gem className="w-4 h-4 text-purple-600" />
+                  <div className="flex-1">
+                    <div className="font-medium text-purple-900">Gói Enterprise</div>
+                    <div className="text-xs text-purple-600">Bạn đang sử dụng gói cao nhất</div>
+                  </div>
+                </div>
               )}
 
               {/* Divider */}

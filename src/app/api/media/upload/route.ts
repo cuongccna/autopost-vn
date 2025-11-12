@@ -1,12 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+import { localStorageService } from '@/lib/services/localStorageService';
+import { insert } from '@/lib/db/postgres';
+import { v4 as uuidv4 } from 'uuid';
 
 // Maximum file sizes
 const MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10MB
@@ -56,106 +53,61 @@ export async function POST(request: NextRequest) {
 
     // Generate unique filename
     const timestamp = Date.now();
-    const randomStr = Math.random().toString(36).substring(7);
+    const randomStr = uuidv4().substring(0, 8);
     const extension = file.name.split('.').pop();
     const fileName = `${userId}/${timestamp}-${randomStr}.${extension}`;
-    const bucket = isImage ? 'post-images' : 'post-videos';
 
-    // Convert File to ArrayBuffer
+    // Convert File to Buffer
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
-
-    // Upload to Supabase Storage
-    let { data: uploadData, error: uploadError } = await supabase.storage
-      .from(bucket)
-      .upload(fileName, buffer, {
-        contentType: file.type,
-        upsert: false,
-      });
-
-    if (uploadError) {
-      console.error('Supabase upload error:', uploadError);
-      
-      // If bucket doesn't exist, create it
-      if (uploadError.message.includes('not found')) {
-        const { error: createError } = await supabase.storage.createBucket(bucket, {
-          public: true,
-          fileSizeLimit: maxSize,
-        });
-
-        if (createError) {
-          console.error('Failed to create bucket:', createError);
-          return NextResponse.json(
-            { error: 'Storage configuration error' },
-            { status: 500 }
-          );
-        }
-
-        // Retry upload
-        const { data: retryData, error: retryError } = await supabase.storage
-          .from(bucket)
-          .upload(fileName, buffer, {
-            contentType: file.type,
-            upsert: false,
-          });
-
-        if (retryError) {
-          return NextResponse.json(
-            { error: 'Upload failed after retry' },
-            { status: 500 }
-          );
-        }
-
-        uploadData = retryData; // Assign retry data
-      } else {
-        return NextResponse.json(
-          { error: uploadError.message },
-          { status: 500 }
-        );
-      }
-    }
-
-    // Ensure uploadData is not null
-    if (!uploadData) {
-      return NextResponse.json(
-        { error: 'Upload failed: no data returned' },
-        { status: 500 }
-      );
-    }
-
-    // Get public URL
-    const { data: urlData } = supabase.storage
-      .from(bucket)
-      .getPublicUrl(fileName);
-
-    const publicUrl = urlData.publicUrl;
 
     // Get workspace_id from session if available
     const workspaceId = (session.user as any).workspace_id || null;
 
+    // Upload to local storage
+    let uploadResult;
+    try {
+      uploadResult = await localStorageService.uploadFile(
+        buffer,
+        file.name,
+        file.type,
+        {
+          userId,
+          workspaceId: workspaceId || undefined
+        }
+      );
+    } catch (uploadError) {
+      console.error('Local storage upload error:', uploadError);
+      return NextResponse.json(
+        { error: 'Upload failed: ' + (uploadError instanceof Error ? uploadError.message : 'Unknown error') },
+        { status: 500 }
+      );
+    }
+
+    const publicUrl = uploadResult.url;
+
     // Save to autopostvn_media table
-    const { data: mediaRecord, error: dbError } = await supabase
-      .from('autopostvn_media')
-      .insert({
+    let mediaRecord;
+    try {
+      const mediaRecords = await insert('autopostvn_media', {
         user_id: userId,
         workspace_id: workspaceId,
         file_name: file.name,
-        file_path: fileName,
+        file_path: uploadResult.path,
         file_type: file.type,
-        file_size: file.size,
+        file_size: uploadResult.size,
         media_type: isImage ? 'image' : 'video',
-        bucket: bucket,
         public_url: publicUrl,
         status: 'uploaded',
         metadata: {
           original_name: file.name,
           uploaded_at: new Date().toISOString(),
+          storage_type: 'local',
+          content_type: file.type,
         },
-      })
-      .select()
-      .single();
-
-    if (dbError) {
+      });
+      mediaRecord = mediaRecords[0];
+    } catch (dbError) {
       console.error('Failed to save media record:', dbError);
       // Don't fail the upload, just log the error
     }
@@ -169,7 +121,6 @@ export async function POST(request: NextRequest) {
         size: file.size,
         url: publicUrl,
         path: fileName,
-        bucket: bucket,
         mediaType: isImage ? 'image' : 'video',
       },
     });
@@ -202,14 +153,12 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    const { error } = await supabase.storage
-      .from(bucket)
-      .remove([path]);
-
-    if (error) {
-      console.error('Delete error:', error);
+    try {
+      await localStorageService.deleteFile(path);
+    } catch (error) {
+      console.error('S3 delete error:', error);
       return NextResponse.json(
-        { error: error.message },
+        { error: 'Failed to delete file from storage' },
         { status: 500 }
       );
     }

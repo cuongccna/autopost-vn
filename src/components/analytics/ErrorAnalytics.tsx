@@ -1,15 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
-
-interface Post {
-  id: string;
-  title: string;
-  datetime: string;
-  providers: string[];
-  status: 'scheduled' | 'published' | 'failed';
-  error?: string;
-}
+import type { Post } from '@/types/Post';
 
 interface ErrorAnalyticsProps {
   posts: Post[];

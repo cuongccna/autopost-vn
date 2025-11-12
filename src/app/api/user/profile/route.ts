@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
-import { sbServer } from '@/lib/supabase/server';
+import { query } from '@/lib/db/postgres';
 
 export async function GET() {
   try {
@@ -11,18 +11,17 @@ export async function GET() {
     }
 
     const userId = (session.user as any).id || session.user.email;
-    const supabase = sbServer(true);
 
-    const { data: userData, error } = await supabase
-      .from('autopostvn_users')
-      .select('*')
-      .eq('id', userId)
-      .single();
+    const result = await query(
+      'SELECT * FROM autopostvn_users WHERE id = $1 LIMIT 1',
+      [userId]
+    );
 
-    if (error) {
-      console.error('Error fetching user profile:', error);
-      return NextResponse.json({ error: 'Failed to fetch profile' }, { status: 500 });
+    if (result.rows.length === 0) {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
+
+    const userData = result.rows[0];
 
     return NextResponse.json({
       success: true,
@@ -50,25 +49,20 @@ export async function PUT(request: NextRequest) {
     
     const { fullName, phone, avatar } = body;
 
-    const supabase = sbServer(true);
-
     // Update user profile
-    const { data: updatedUser, error } = await supabase
-      .from('autopostvn_users')
-      .update({
-        full_name: fullName,
-        phone: phone,
-        avatar_url: avatar,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', userId)
-      .select()
-      .single();
+    const result = await query(
+      `UPDATE autopostvn_users 
+       SET full_name = $1, phone = $2, avatar_url = $3, updated_at = NOW()
+       WHERE id = $4
+       RETURNING *`,
+      [fullName, phone, avatar, userId]
+    );
 
-    if (error) {
-      console.error('Error updating user profile:', error);
-      return NextResponse.json({ error: 'Failed to update profile' }, { status: 500 });
+    if (result.rows.length === 0) {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
+
+    const updatedUser = result.rows[0];
 
     return NextResponse.json({
       success: true,

@@ -1,24 +1,19 @@
-import { createClient } from '@supabase/supabase-js';
-import { OAuthTokenManager } from './TokenEncryptionService';
+/**
+ * Example: UserManagementService using PostgreSQL
+ * This is a working example showing how to migrate from Supabase to PostgreSQL
+ * 
+ * Copy patterns from this file to migrate other services
+ */
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+import { query, insert, update as updateRecord, deleteFrom } from '@/lib/db/postgres';
+import { OAuthTokenManager } from './TokenEncryptionService';
 
 export interface UserWorkspace {
   id: string;
   user_email: string;
   workspace_name: string;
   created_at?: string;
-  settings?: {
-    default_timezone?: string;
-    auto_post?: boolean;
-    notification_preferences?: {
-      email?: boolean;
-      browser?: boolean;
-    };
-  };
+  settings?: any;
 }
 
 export interface UserSocialAccount {
@@ -31,111 +26,101 @@ export interface UserSocialAccount {
   access_token: string;
   refresh_token?: string;
   token_expires_at?: string;
-  account_data: {
-    name: string;
-    category?: string;
-    profile_picture?: string;
-    follower_count?: number;
-  };
+  account_data: any;
   status: 'connected' | 'expired' | 'error';
   created_at: string;
   updated_at: string;
 }
 
-export class UserManagementService {
-  // Create or get user workspace
+export class UserManagementServicePG {
+  /**
+   * Get or create user workspace (1:1 mapping with user_id)
+   */
   async getOrCreateUserWorkspace(userEmail: string): Promise<UserWorkspace> {
-    // For simplicity, use the existing workspace we just created for test user
-    // In production, you'd want proper user-workspace mapping
-    if (userEmail === 'test@autopostvn.com') {
-      return {
-        id: '5dc9c501-3c00-4173-84cf-d01307f253c2',
-        user_email: userEmail,
-        workspace_name: 'test@autopostvn.com Workspace'
-      };
+    // First, get user by email
+    const userResult = await query(
+      'SELECT id, email, full_name FROM autopostvn_users WHERE email = $1 LIMIT 1',
+      [userEmail]
+    )
+
+    if (userResult.rows.length === 0) {
+      throw new Error(`User not found: ${userEmail}`)
     }
 
-    // For other users, create a simple workspace
-    const workspaceName = `${userEmail}'s Workspace`;
-    const workspaceSlug = userEmail.replace('@', '-').replace('.', '-');
+    const user = userResult.rows[0]
+    
+    // Try to find existing workspace by user_id (more reliable than slug)
+    const existingResult = await query(
+      'SELECT * FROM autopostvn_workspaces WHERE user_id = $1 LIMIT 1',
+      [user.id]
+    )
 
-    // Try to find existing workspace by name pattern
-    const { data: existing, error: fetchError } = await supabase
-      .from('autopostvn_workspaces')
-      .select('*')
-      .eq('name', workspaceName)
-      .single();
-
-    if (existing && !fetchError) {
+    if (existingResult.rows.length > 0) {
+      const existing = existingResult.rows[0]
       return {
         id: existing.id,
         user_email: userEmail,
-        workspace_name: existing.name
-      };
+        workspace_name: existing.name,
+        created_at: existing.created_at,
+        settings: existing.settings
+      }
     }
 
-    // Create new workspace
-    const { data, error } = await supabase
-      .from('autopostvn_workspaces')
-      .insert({
-        name: workspaceName,
-        slug: workspaceSlug,
-        description: `Personal workspace for ${userEmail}`
-      })
-      .select()
-      .single();
+    // Create new workspace (1:1 with user) if not exists
+    const workspaceSlug = `user-${user.id.substring(0, 8)}`
+    const workspaceName = `${user.full_name || userEmail}'s Workspace`
+    
+    const newWorkspace = await insert('autopostvn_workspaces', {
+      user_id: user.id,  // ✅ Set user_id FK
+      name: workspaceName,
+      slug: workspaceSlug,
+      description: `Personal workspace for ${userEmail}`,
+      settings: JSON.stringify({})
+    })
 
-    if (error) {
-      throw new Error(`Failed to create workspace: ${error.message}`);
-    }
-
+    const data = newWorkspace[0]
     return {
       id: data.id,
       user_email: userEmail,
-      workspace_name: data.name
-    };
+      workspace_name: data.name,
+      created_at: data.created_at,
+      settings: data.settings
+    }
   }
 
-  // Get user's social accounts
+  /**
+   * Get user's social accounts
+   */
   async getUserSocialAccounts(userEmail: string): Promise<UserSocialAccount[]> {
-    // First get user's workspace
     const workspace = await this.getOrCreateUserWorkspace(userEmail);
     
-    const { data, error } = await supabase
-      .from('autopostvn_social_accounts')
-      .select('*')
-      .eq('workspace_id', workspace.id)
-      .order('created_at', { ascending: false });
+    const result = await query(
+      `SELECT * FROM autopostvn_social_accounts 
+       WHERE workspace_id = $1 
+       ORDER BY created_at DESC`,
+      [workspace.id]
+    );
 
-    if (error) {
-      throw new Error(`Failed to fetch social accounts: ${error.message}`);
-    }
-
-    // Map to UserSocialAccount format
-    return (data || []).map(account => ({
+    return result.rows.map((account: any) => ({
       id: account.id,
       user_email: userEmail,
       workspace_id: account.workspace_id,
-      provider: account.provider as 'facebook' | 'facebook_page' | 'instagram' | 'zalo',
+      provider: account.provider,
       account_name: account.name || account.username || 'Unknown',
       provider_account_id: account.provider_id,
       access_token: OAuthTokenManager.decryptForUse(account.token_encrypted || ''),
       refresh_token: account.refresh_token_encrypted,
       token_expires_at: account.expires_at,
-      account_data: {
-        name: account.name || account.username || 'Unknown',
-        category: account.metadata?.category,
-        profile_picture: account.avatar_url,
-        follower_count: account.metadata?.follower_count
-      },
-      status: account.status === 'connected' ? 'connected' : 
-              account.status === 'expired' ? 'expired' : 'error',
+      account_data: account.metadata || {},
+      status: account.status,
       created_at: account.created_at,
       updated_at: account.updated_at
     }));
   }
 
-  // Save OAuth account
+  /**
+   * Save OAuth account
+   */
   async saveOAuthAccount(
     userEmail: string,
     provider: string,
@@ -148,12 +133,10 @@ export class UserManagementService {
   ): Promise<UserSocialAccount> {
     const workspace = await this.getOrCreateUserWorkspace(userEmail);
 
-    // Validate required fields
     if (!oauthData.account_info.providerId) {
       throw new Error(`Missing provider account ID for ${provider}`);
     }
 
-    // Map to autopostvn_social_accounts structure
     const accountData = {
       workspace_id: workspace.id,
       provider: provider,
@@ -170,239 +153,100 @@ export class UserManagementService {
       metadata: oauthData.account_info,
     };
 
-    // Check if account already exists
-    const { data: existing } = await supabase
-      .from('autopostvn_social_accounts')
-      .select('*')
-      .eq('workspace_id', workspace.id)
-      .eq('provider', provider)
-      .eq('provider_id', oauthData.account_info.providerId)
-      .single();
+    // Check if account exists
+    const existingResult = await query(
+      `SELECT * FROM autopostvn_social_accounts 
+       WHERE workspace_id = $1 AND provider = $2 AND provider_id = $3 LIMIT 1`,
+      [workspace.id, provider, oauthData.account_info.providerId]
+    );
 
-    let data, error;
+    let resultData;
 
-    if (existing) {
-      // Update existing account
-      const updateResult = await supabase
-        .from('autopostvn_social_accounts')
-        .update(accountData)
-        .eq('id', existing.id)
-        .select()
-        .single();
-      
-      data = updateResult.data;
-      error = updateResult.error;
+    if (existingResult.rows.length > 0) {
+      // Update existing
+      const existing = existingResult.rows[0];
+      const updated = await updateRecord(
+        'autopostvn_social_accounts',
+        accountData,
+        { id: existing.id }
+      );
+      resultData = updated[0];
     } else {
-      // Insert new account
-      const insertResult = await supabase
-        .from('autopostvn_social_accounts')
-        .insert(accountData)
-        .select()
-        .single();
-      
-      data = insertResult.data;
-      error = insertResult.error;
+      // Insert new
+      const inserted = await insert('autopostvn_social_accounts', accountData);
+      resultData = inserted[0];
     }
 
-    if (error) {
-      throw new Error(`Failed to save OAuth account: ${error.message}`);
-    }
-
-    // Map back to UserSocialAccount format
     return {
-      id: data.id,
+      id: resultData.id,
       user_email: userEmail,
-      workspace_id: data.workspace_id,
-      provider: data.provider as 'facebook' | 'instagram' | 'zalo',
-      account_name: data.name,
-      provider_account_id: data.provider_id,
+      workspace_id: resultData.workspace_id,
+      provider: resultData.provider,
+      account_name: resultData.name,
+      provider_account_id: resultData.provider_id,
       access_token: oauthData.access_token,
       refresh_token: oauthData.refresh_token,
-      token_expires_at: data.expires_at,
+      token_expires_at: resultData.expires_at,
       account_data: oauthData.account_info,
       status: 'connected',
-      created_at: data.created_at,
-      updated_at: data.updated_at
+      created_at: resultData.created_at,
+      updated_at: resultData.updated_at
     };
   }
 
-  // Update account status
+  /**
+   * Update account status
+   */
   async updateAccountStatus(
     accountId: string,
     status: 'connected' | 'expired' | 'error'
   ): Promise<void> {
-    const { error } = await supabase
-      .from('autopostvn_social_accounts')
-      .update({ 
-        status,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', accountId);
-
-    if (error) {
-      throw new Error(`Failed to update account status: ${error.message}`);
-    }
+    await updateRecord(
+      'autopostvn_social_accounts',
+      { status }, // removed updated_at - auto-handled by trigger
+      { id: accountId }
+    );
   }
 
-  // Disconnect account
+  /**
+   * Disconnect account
+   */
   async disconnectAccount(accountId: string, userEmail: string): Promise<void> {
-    // Get user's workspace to verify ownership
     const workspace = await this.getOrCreateUserWorkspace(userEmail);
     
-    const { error } = await supabase
-      .from('autopostvn_social_accounts')
-      .delete()
-      .eq('id', accountId)
-      .eq('workspace_id', workspace.id); // Security: only delete own workspace accounts
-
-    if (error) {
-      throw new Error(`Failed to disconnect account: ${error.message}`);
-    }
-  }
-
-  // Refresh token for account
-  async refreshAccountToken(accountId: string): Promise<UserSocialAccount> {
-    // Get account details
-    const { data: account, error: fetchError } = await supabase
-      .from('autopostvn_social_accounts')
-      .select('*')
-      .eq('id', accountId)
-      .single();
-
-    if (fetchError || !account) {
-      throw new Error('Account not found');
-    }
-
-    // Decode refresh token
-    const refreshToken = account.refresh_token_encrypted 
-      ? atob(account.refresh_token_encrypted) 
-      : null;
-
-    // Attempt to refresh token based on provider
-    let newTokenData;
-    try {
-      newTokenData = await this.refreshProviderToken(
-        account.provider,
-        refreshToken || undefined
-      );
-    } catch (error) {
-      // Mark account as expired if refresh fails
-      await this.updateAccountStatus(accountId, 'error');
-      throw error;
-    }
-
-    // Update account with new token
-    const { data, error } = await supabase
-      .from('autopostvn_social_accounts')
-      .update({
-        token_encrypted: OAuthTokenManager.encryptForStorage(newTokenData.access_token),
-        refresh_token_encrypted: newTokenData.refresh_token 
-          ? OAuthTokenManager.encryptForStorage(newTokenData.refresh_token) 
-          : account.refresh_token_encrypted,
-        expires_at: newTokenData.expires_in
-          ? new Date(Date.now() + newTokenData.expires_in * 1000).toISOString()
-          : null,
-        status: 'connected',
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', accountId)
-      .select()
-      .single();
-
-    if (error) {
-      throw new Error(`Failed to update account token: ${error.message}`);
-    }
-
-    // Map back to UserSocialAccount format
-    return {
-      id: data.id,
-      user_email: '', // Will be filled by caller
-      workspace_id: data.workspace_id,
-      provider: data.provider as 'facebook' | 'instagram' | 'zalo',
-      account_name: data.name,
-      provider_account_id: data.provider_id,
-      access_token: newTokenData.access_token,
-      refresh_token: newTokenData.refresh_token,
-      token_expires_at: data.expires_at,
-      account_data: data.metadata || {},
-      status: 'connected',
-      created_at: data.created_at,
-      updated_at: data.updated_at
-    };
-  }
-
-  // Provider-specific token refresh
-  private async refreshProviderToken(
-    provider: string,
-    refreshToken?: string
-  ): Promise<any> {
-    if (!refreshToken) {
-      throw new Error('No refresh token available');
-    }
-
-    const refreshUrls = {
-      facebook: 'https://graph.facebook.com/v18.0/oauth/access_token',
-      instagram: 'https://graph.facebook.com/v18.0/oauth/access_token',
-      zalo: 'https://oauth.zaloapp.com/v4/oa/access_token',
-    };
-
-    const clientIds = {
-      facebook: process.env.FACEBOOK_CLIENT_ID!,
-      instagram: process.env.FACEBOOK_CLIENT_ID!,
-      zalo: process.env.ZALO_CLIENT_ID!,
-    };
-
-    const clientSecrets = {
-      facebook: process.env.FACEBOOK_CLIENT_SECRET!,
-      instagram: process.env.FACEBOOK_CLIENT_SECRET!,
-      zalo: process.env.ZALO_CLIENT_SECRET!,
-    };
-
-    const params = {
-      grant_type: 'refresh_token',
-      refresh_token: refreshToken,
-      client_id: clientIds[provider as keyof typeof clientIds],
-      client_secret: clientSecrets[provider as keyof typeof clientSecrets],
-    };
-
-    const response = await fetch(
-      refreshUrls[provider as keyof typeof refreshUrls],
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams(params),
-      }
+    await query(
+      `DELETE FROM autopostvn_social_accounts 
+       WHERE id = $1 AND workspace_id = $2`,
+      [accountId, workspace.id]
     );
-
-    if (!response.ok) {
-      throw new Error(`Token refresh failed: ${response.statusText}`);
-    }
-
-    return response.json();
   }
 
-  // Get user's posts (filtered by their accounts)
+  /**
+   * Get user's posts
+   */
   async getUserPosts(userEmail: string): Promise<any[]> {
-    // Get user's social accounts first
     const accounts = await this.getUserSocialAccounts(userEmail);
-    const accountIds = accounts.map(acc => acc.id);
-
-    if (accountIds.length === 0) {
+    
+    if (accounts.length === 0) {
       return [];
     }
 
-    const { data, error } = await supabase
-      .from('autopostvn_posts')
-      .select('*')
-      .in('account_id', accountIds) // Assuming posts have account_id field
-      .order('created_at', { ascending: false });
+    const accountIds = accounts.map(acc => acc.id);
+    const placeholders = accountIds.map((_, i) => `$${i + 1}`).join(', ');
+    
+    const result = await query(
+      `SELECT * FROM autopostvn_posts 
+       WHERE account_id IN (${placeholders}) 
+       ORDER BY created_at DESC`,
+      accountIds
+    );
 
-    if (error) {
-      throw new Error(`Failed to fetch user posts: ${error.message}`);
-    }
-
-    return data || [];
+    return result.rows;
   }
 }
 
-export const userManagementService = new UserManagementService();
+export const userManagementServicePG = new UserManagementServicePG();
+
+// Alias for backward compatibility
+export const userManagementService = userManagementServicePG;
+export { UserManagementServicePG as UserManagementService };

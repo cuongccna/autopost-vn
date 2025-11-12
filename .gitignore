@@ -10,6 +10,10 @@ yarn-error.log*
 /.next/
 .swc/
 
+# Local File Storage (uploaded files)
+/public/uploads/
+!/public/uploads/.gitkeep
+
 # Environment variables
 .env
 .env.local

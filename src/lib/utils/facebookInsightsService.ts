@@ -10,7 +10,7 @@
  * API Reference: https://developers.facebook.com/docs/graph-api/reference/v21.0/insights
  */
 
-import { createClient } from '@supabase/supabase-js';
+import { query } from '@/lib/db/postgres';
 import logger from './logger';
 import { withRateLimit } from './rateLimiter';
 import { OAuthTokenManager } from '../services/TokenEncryptionService';
@@ -55,13 +55,8 @@ export interface BestPostingTime {
 }
 
 export class FacebookInsightsService {
-  private supabase: ReturnType<typeof createClient>;
-
   constructor() {
-    this.supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    );
+    // No Supabase client needed - using PostgreSQL directly
   }
 
   /**
@@ -132,22 +127,26 @@ export class FacebookInsightsService {
       const engagement = likes + comments + shares;
       const engagementRate = reach > 0 ? (engagement / reach) * 100 : 0;
 
-      // Get post info from database
-      const { data: dbPost } = await this.supabase
-        .from('autopostvn_scheduled_posts')
-        .select('id, content, published_at, autopostvn_social_accounts(name)')
-        .eq('external_post_id', postId)
-        .single();
+      // Get post info from database using PostgreSQL
+      const dbPostResult = await query(
+        `SELECT ps.id, ps.published_at, p.content, sa.name as account_name
+         FROM autopostvn_post_schedules ps
+         INNER JOIN autopostvn_posts p ON p.id = ps.post_id
+         INNER JOIN autopostvn_social_accounts sa ON sa.id = ps.social_account_id
+         WHERE ps.external_post_id = $1
+         LIMIT 1`,
+        [postId]
+      );
 
-      const post = dbPost as any;
+      const dbPost = dbPostResult.rows[0];
 
       return {
-        postId: post?.id || '',
+        postId: dbPost?.id || '',
         externalPostId: postId,
         platform: 'facebook',
-        accountName: post?.autopostvn_social_accounts?.name || 'Unknown',
-        publishedAt: new Date(post?.published_at || postData.created_time),
-        content: post?.content || postData.message || '',
+        accountName: dbPost?.account_name || 'Unknown',
+        publishedAt: new Date(dbPost?.published_at || postData.created_time),
+        content: dbPost?.content || postData.message || '',
         metrics: {
           likes,
           comments,
@@ -176,50 +175,57 @@ export class FacebookInsightsService {
     limit: number = 10
   ): Promise<PostInsights[]> {
     try {
-      // First, get all social accounts for this workspace
-      const { data: accounts, error: accountsError } = await this.supabase
-        .from('autopostvn_social_accounts')
-        .select('id, name, provider, token_encrypted')
-        .eq('workspace_id', workspaceId)
-        .in('provider', ['facebook', 'facebook_page']);
+      // First, get all social accounts for this workspace using PostgreSQL
+      const accountsResult = await query(
+        `SELECT id, name, provider, token_encrypted
+         FROM autopostvn_social_accounts
+         WHERE workspace_id = $1
+         AND provider IN ('facebook', 'facebook_page')`,
+        [workspaceId]
+      );
 
-      if (accountsError) throw accountsError;
-      if (!accounts || accounts.length === 0) {
+      const accounts = accountsResult.rows;
+
+      if (accounts.length === 0) {
         logger.warn('No Facebook accounts found for workspace', { workspaceId });
         return [];
       }
 
-      const accountIds = (accounts as any[]).map((a: any) => a.id);
+      const accountIds = accounts.map((a: any) => a.id);
 
-      // Get recent published posts
-      const { data: schedules, error: schedulesError } = await this.supabase
-        .from('autopostvn_post_schedules')
-        .select('id, post_id, external_post_id, published_at, social_account_id')
-        .in('social_account_id', accountIds)
-        .eq('status', 'published')
-        .not('external_post_id', 'is', null)
-        .order('published_at', { ascending: false })
-        .limit(limit);
+      // Get recent published posts using PostgreSQL
+      const schedulesResult = await query(
+        `SELECT id, post_id, external_post_id, published_at, social_account_id
+         FROM autopostvn_post_schedules
+         WHERE social_account_id = ANY($1)
+         AND status = 'published'
+         AND external_post_id IS NOT NULL
+         ORDER BY published_at DESC
+         LIMIT $2`,
+        [accountIds, limit]
+      );
 
-      if (schedulesError) throw schedulesError;
-      if (!schedules || schedules.length === 0) {
+      const schedules = schedulesResult.rows;
+
+      if (schedules.length === 0) {
         logger.info('No published posts found', { workspaceId });
         return [];
       }
 
       // Get post content
-      const postIds = [...new Set((schedules as any[]).map((s: any) => s.post_id))];
-      const { data: posts } = await this.supabase
-        .from('autopostvn_posts')
-        .select('id, content')
-        .in('id', postIds);
+      const postIds = [...new Set(schedules.map((s: any) => s.post_id))];
+      const postsResult = await query(
+        `SELECT id, content FROM autopostvn_posts WHERE id = ANY($1)`,
+        [postIds]
+      );
 
-      const postsMap = new Map((posts as any[] || []).map((p: any) => [p.id, p]));
-      const accountsMap = new Map((accounts as any[]).map((a: any) => [a.id, a]));
+      const posts = postsResult.rows;
+      const postsMap = new Map(posts.map((p: any) => [p.id, p]));
+      const accountsMap = new Map(accounts.map((a: any) => [a.id, a]));
 
       const insights: PostInsights[] = [];
 
-      for (const schedule of (schedules as any[])) {
+      for (const schedule of schedules) {
         const account = accountsMap.get(schedule.social_account_id);
         if (!account) continue;
 

@@ -8,15 +8,7 @@ import TimeSlotAnalytics from '@/components/analytics/TimeSlotAnalytics';
 import ErrorAnalytics from '@/components/analytics/ErrorAnalytics';
 import EngagementTrendChart from '@/components/analytics/EngagementTrendChart';
 import { toast } from '@/lib/utils/toast';
-
-interface Post {
-  id: string;
-  title: string;
-  datetime: string;
-  providers: string[];
-  status: 'scheduled' | 'published' | 'failed';
-  error?: string;
-}
+import type { Post } from '@/types/Post';
 
 interface AnalyticsProps {
   posts: Post[];
@@ -69,7 +61,26 @@ export default function Analytics({ posts, className = '' }: AnalyticsProps) {
     const fetchAnalytics = async () => {
       try {
         setLoading(true);
-        const workspaceId = localStorage.getItem('current_workspace_id') || 'ed172ece-2dc6-4ee2-b1cf-0c1301681650';
+        
+        // First get user's workspace
+        const workspaceResponse = await fetch('/api/user/workspace');
+        if (!workspaceResponse.ok) {
+          console.warn('Failed to get user workspace, skipping analytics fetch');
+          setAnalyticsData({
+            summary: null,
+            insights: [],
+            best_posting_times: []
+          });
+          setLoading(false);
+          return;
+        }
+        
+        const workspaceData = await workspaceResponse.json();
+        const workspaceId = workspaceData.workspace.id;
+        
+        // Store in localStorage for future use
+        localStorage.setItem('current_workspace_id', workspaceId);
+        
         const response = await fetch(`/api/analytics?workspace_id=${workspaceId}`);
         
         if (response.ok) {
@@ -82,9 +93,23 @@ export default function Analytics({ posts, className = '' }: AnalyticsProps) {
             insights: data.insights || [],
             best_posting_times: data.best_posting_times || []
           });
+        } else {
+          console.warn('Analytics API failed, using fallback data from posts');
+          // Use posts data as fallback
+          setAnalyticsData({
+            summary: null,
+            insights: [],
+            best_posting_times: []
+          });
         }
       } catch (error) {
         console.error('Failed to fetch analytics:', error);
+        // Use posts data as fallback
+        setAnalyticsData({
+          summary: null,
+          insights: [],
+          best_posting_times: []
+        });
       } finally {
         setLoading(false);
       }

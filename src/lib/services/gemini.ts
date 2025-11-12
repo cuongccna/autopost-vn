@@ -53,6 +53,49 @@ const defaultConfig: GeminiConfig = {
 };
 
 /**
+ * Sleep function for retry delays
+ */
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * Retry function with exponential backoff
+ */
+async function retryWithBackoff<T>(
+  fn: () => Promise<T>,
+  maxRetries: number = 3,
+  baseDelay: number = 1000
+): Promise<T> {
+  let lastError: Error;
+  
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error as Error;
+      
+      // If it's the last attempt, throw the error
+      if (attempt === maxRetries) {
+        throw lastError;
+      }
+      
+      // Check if it's a rate limit error (429)
+      if (lastError.message.includes('429') || lastError.message.includes('Too Many Requests')) {
+        const delay = baseDelay * Math.pow(2, attempt) + Math.random() * 1000; // Add jitter
+        console.log(`Rate limit hit, retrying in ${delay}ms (attempt ${attempt + 1}/${maxRetries + 1})`);
+        await sleep(delay);
+      } else {
+        // For non-rate-limit errors, throw immediately
+        throw lastError;
+      }
+    }
+  }
+  
+  throw lastError!;
+}
+
+/**
  * Generate content caption for social media posts with rich context
  */
 export async function generateCaption(params: {
@@ -192,10 +235,13 @@ Trả về chỉ nội dung caption dạng plain text, không có markdown, khô
 `;
 
   try {
-    const result = await model.generateContent({
-      contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      generationConfig: config,
-    });
+    // Use retry logic with exponential backoff for rate limit handling
+    const result = await retryWithBackoff(async () => {
+      return await model.generateContent({
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        generationConfig: config,
+      });
+    }, 3, 2000); // 3 retries, starting with 2 second delay
 
     const response = await result.response;
     let text = response.text();

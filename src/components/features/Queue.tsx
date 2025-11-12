@@ -1,18 +1,7 @@
 'use client';
 
 import { PROVIDERS } from '@/lib/constants';
-
-interface Post {
-  id: string;
-  title: string;
-  datetime: string;
-  providers: string[];
-  status: 'scheduled' | 'published' | 'failed';
-}
-
-interface QueueProps {
-  posts: Post[];
-}
+import type { Post } from '@/types/Post';
 
 function getStatusBadge(post: Post) {
   const now = new Date();
@@ -74,7 +63,7 @@ function getTimeIndicator(post: Post) {
   }
 }
 
-export default function Queue({ posts }: QueueProps) {
+export default function Queue({ posts }: { posts: Post[] }) {
   const sortedPosts = [...posts].sort(
     (a, b) => new Date(a.datetime).getTime() - new Date(b.datetime).getTime()
   );

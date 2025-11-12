@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
-import { sbServer } from '@/lib/supabase/server';
+import { query } from '@/lib/db/postgres';
 import { userManagementService } from '@/lib/services/UserManagementService';
 
 export async function GET(request: NextRequest) {
@@ -18,62 +18,57 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'User ID not found' }, { status: 401 });
     }
 
-    const supabase = sbServer(true); // Use service role
-
     // Get total posts count
-    const { count: totalPosts } = await supabase
-      .from('autopostvn_posts')
-      .select('*', { count: 'exact', head: true })
-      .eq('user_id', userId);
+    const totalPostsResult = await query(
+      'SELECT COUNT(*) as count FROM autopostvn_posts WHERE user_id = $1',
+      [userId]
+    );
+    const totalPosts = parseInt(totalPostsResult.rows[0]?.count || '0');
 
     // Get posts published today
     const today = new Date().toISOString().split('T')[0];
-    const { count: publishedToday } = await supabase
-      .from('autopostvn_posts')
-      .select('*', { count: 'exact', head: true })
-      .eq('user_id', userId)
-      .gte('created_at', today + 'T00:00:00')
-      .lt('created_at', today + 'T23:59:59');
+    const publishedTodayResult = await query(
+      `SELECT COUNT(*) as count FROM autopostvn_posts 
+       WHERE user_id = $1 
+       AND created_at >= $2::date 
+       AND created_at < ($2::date + interval '1 day')`,
+      [userId, today]
+    );
+    const publishedToday = parseInt(publishedTodayResult.rows[0]?.count || '0');
 
-    // Get connected social accounts (use exact same logic as /api/user/accounts)
+    // Get connected social accounts
     const userSocialAccounts = await userManagementService.getUserSocialAccounts(session.user.email!);
-    console.log('🔗 Social accounts found via UserManagementService:', userSocialAccounts?.length || 0, userSocialAccounts);
+    console.log('🔗 Social accounts found via UserManagementService:', userSocialAccounts?.length || 0);
     const connectedAccounts = userSocialAccounts?.length || 0;
 
     // Get scheduled posts count using actual user's social accounts
     const userAccountIds = userSocialAccounts?.map(acc => acc.id) || [];
-    console.log('📅 User account IDs for schedules (from UserManagementService):', userAccountIds);
+    console.log('📅 User account IDs for schedules:', userAccountIds);
 
-    // Debug: Check all schedules in database
-    const { data: allSchedules } = await supabase
-      .from('autopostvn_post_schedules')
-      .select('*')
-      .eq('status', 'pending')
-      .order('created_at', { ascending: false })
-      .limit(5);
-    
-    console.log('🔍 All pending schedules in DB:', allSchedules);
-
-    const { count: scheduledPosts } = userAccountIds.length > 0 ? await supabase
-      .from('autopostvn_post_schedules')
-      .select('*', { count: 'exact', head: true })
-      .in('social_account_id', userAccountIds)
-      .eq('status', 'pending') : { count: 0 };
+    let scheduledPosts = 0;
+    if (userAccountIds.length > 0) {
+      const scheduledResult = await query(
+        `SELECT COUNT(*) as count FROM autopostvn_post_schedules 
+         WHERE social_account_id = ANY($1) AND status = 'pending'`,
+        [userAccountIds]
+      );
+      scheduledPosts = parseInt(scheduledResult.rows[0]?.count || '0');
+    }
 
     console.log('📅 Scheduled posts found:', scheduledPosts);
 
     console.log('📊 Dashboard stats:', {
-      totalPosts: totalPosts || 0,
-      scheduledPosts: scheduledPosts || 0,
-      publishedToday: publishedToday || 0,
-      connectedAccounts: connectedAccounts || 0
+      totalPosts,
+      scheduledPosts,
+      publishedToday,
+      connectedAccounts
     });
 
     return NextResponse.json({
-      totalPosts: totalPosts || 0,
-      scheduledPosts: scheduledPosts || 0,
-      publishedToday: publishedToday || 0,
-      connectedAccounts: connectedAccounts || 0
+      totalPosts,
+      scheduledPosts,
+      publishedToday,
+      connectedAccounts
     });
 
   } catch (error) {

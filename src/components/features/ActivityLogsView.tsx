@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { SystemActivityLog, ActivityLogFilters } from '@/types/activity-logs';
 import { useActivityLogs } from '@/hooks/useActivityLogs';
 import { format } from 'date-fns';
@@ -10,6 +10,7 @@ interface ActivityLogsViewProps {
   workspaceId?: string;
   showFilters?: boolean;
   limit?: number;
+  status?: 'success' | 'failed' | 'warning';
 }
 
 const statusIcons = {
@@ -45,14 +46,28 @@ const statusNames = {
 export default function ActivityLogsView({ 
   workspaceId, 
   showFilters = true, 
-  limit = 20 
+  limit = 20,
+  status
 }: ActivityLogsViewProps) {
   const [filters, setFilters] = useState<ActivityLogFilters>({ 
     limit,
-    offset: 0 
+    offset: 0,
+    status
   });
   const [currentPage, setCurrentPage] = useState(1);
   const { logs, loading, error, hasMore, total, fetchLogs, loadMore } = useActivityLogs(filters);
+
+  // Update filters when status prop changes (from parent component)
+  useEffect(() => {
+    const updatedFilters = { 
+      ...filters, 
+      status, 
+      offset: 0 
+    };
+    setFilters(updatedFilters);
+    setCurrentPage(1);
+    fetchLogs(updatedFilters);
+  }, [status]); // Re-run when status changes
 
   const handleFilterChange = (newFilters: Partial<ActivityLogFilters>) => {
     const updatedFilters = { ...filters, ...newFilters, offset: 0 };

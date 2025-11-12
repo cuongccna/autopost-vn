@@ -1,4 +1,4 @@
-import { sbServer } from '@/lib/supabase/server';
+import { query } from '@/lib/db/postgres';
 import { OAuthTokenManager } from '@/lib/services/TokenEncryptionService';
 import { withRateLimit, checkRateLimit } from '@/lib/utils/rateLimiter';
 import logger, { loggers } from '@/lib/utils/logger';
@@ -274,6 +274,20 @@ export class FacebookPublisher extends BaseSocialPublisher {
   private async uploadMediaToFacebook(mediaUrl: string, accessToken: string, pageId: string): Promise<string | null> {
     try {
       console.log('📤 Uploading media:', mediaUrl);
+      
+      // Validate URL is publicly accessible
+      if (mediaUrl.includes('localhost') || mediaUrl.includes('127.0.0.1') || mediaUrl.includes('192.168.')) {
+        const isProduction = process.env.NODE_ENV === 'production';
+        const warningMsg = `⚠️ ${isProduction ? 'ERROR' : 'WARNING'}: Using local URL (${mediaUrl}) - Facebook cannot access localhost URLs`;
+        
+        if (isProduction) {
+          console.error(warningMsg);
+          return null;
+        } else {
+          console.warn(warningMsg);
+          console.warn('💡 This will work when deployed to VPS with public domain');
+        }
+      }
 
       // For external URLs, use url parameter
       const uploadData = {
@@ -971,23 +985,27 @@ export async function logPublishActivity(
   result: PublishResult,
   userId?: string
 ) {
-  const sb = sbServer(true);
-  
   const status = result.success ? 'success' : 'failed';
   const description = result.success 
     ? `Đăng bài thành công lên ${account.provider}: ${account.name}`
     : `Đăng bài thất bại lên ${account.provider}: ${account.name} - ${result.error}`;
 
   try {
-    await sb.from('autopostvn_system_activity_logs').insert({
-      user_id: userId,
-      action_type: 'post_published',
-      action_category: 'post',
+    await query(`
+      INSERT INTO autopostvn_system_activity_logs (
+        user_id, action_type, action_category, description, status,
+        target_resource_type, target_resource_id, additional_data, created_at
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+    `, [
+      userId,
+      'post_published',
+      'post',
       description,
       status,
-      target_resource_type: 'post',
-      target_resource_id: postId,
-      additional_data: {
+      'post',
+      postId,
+      JSON.stringify({
         schedule_id: scheduleId,
         social_account_id: account.id,
         provider: account.provider,
@@ -995,8 +1013,8 @@ export async function logPublishActivity(
         error: result.error,
         platform_response: result.platformResponse,
         publish_timestamp: new Date().toISOString()
-      }
-    });
+      })
+    ]);
   } catch (error) {
     console.error('Failed to log publish activity:', error);
   }

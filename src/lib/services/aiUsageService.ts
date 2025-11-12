@@ -1,4 +1,4 @@
-import { sbServer } from '@/lib/supabase/server';
+import { db } from '@/lib/db/supabase-compat';
 
 export interface AIUsageStats {
   dailyUsage: number;
@@ -25,14 +25,11 @@ export async function checkAIRateLimit(
   userRole: string = 'free'
 ): Promise<RateLimitResult> {
   try {
-    const supabase = sbServer(true); // Use service role for admin operations
-    
-    // Call the database function to check rate limits
-    const { data, error } = await supabase
-      .rpc('check_ai_rate_limit', {
-        p_user_id: userId,
-        p_user_role: userRole
-      });
+    // Call the database function to check rate limits using PostgreSQL
+    const { data, error } = await db.rpc('check_ai_rate_limit', {
+      p_user_id: userId,
+      p_user_role: userRole
+    });
 
     if (error) {
       console.error('Error checking AI rate limit:', error);
@@ -101,9 +98,7 @@ export async function logAIUsage(
   errorMessage?: string
 ): Promise<void> {
   try {
-    const supabase = sbServer(true); // Use service role for admin operations
-    
-    const { error } = await supabase
+    const { error } = await db
       .from('autopostvn_ai_usage')
       .insert({
         user_id: userId,
@@ -128,34 +123,30 @@ export async function logAIUsage(
  */
 export async function getAIUsageStats(userId: string): Promise<AIUsageStats | null> {
   try {
-    const supabase = sbServer(true); // Use service role for admin operations
-    
     // Get user role first - try to find existing user
-    let { data: userData, error: userError } = await supabase
+    let { data: userData, error: userError } = await db
       .from('autopostvn_users')
       .select('user_role')
       .eq('id', userId)
       .single();
 
     // If user doesn't exist, create a new one with free tier
-    if (userError && userError.code === 'PGRST116') {
-      const { data: newUser, error: createError } = await supabase
+    if (userError && userError.message?.includes('No rows')) {
+      const { data: newUser, error: createError } = await db
         .from('autopostvn_users')
         .insert({
           id: userId,
           email: '', // Will be updated later if needed
           user_role: 'free',
           created_at: new Date().toISOString()
-        })
-        .select('user_role')
-        .single();
+        });
 
       if (createError) {
         console.error('Error creating user:', createError);
         return null;
       }
       
-      userData = newUser;
+      userData = Array.isArray(newUser) ? newUser[0] : newUser;
     } else if (userError) {
       console.error('Error getting user data:', userError);
       return null;

@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Media Upload</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .upload-area {
+            border: 2px dashed #ccc;
+            border-radius: 8px;
+            padding: 40px;
+            text-align: center;
+            margin: 20px 0;
+            cursor: pointer;
+        }
+        .upload-area:hover {
+            border-color: #007bff;
+            background-color: #f8f9fa;
+        }
+        .file-list {
+            margin-top: 20px;
+        }
+        .file-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin: 5px 0;
+        }
+        .progress {
+            width: 100%;
+            height: 20px;
+            background-color: #f0f0f0;
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+        .progress-bar {
+            height: 100%;
+            background-color: #007bff;
+            transition: width 0.3s ease;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 4px;
+        }
+        .success {
+            background-color: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        .error {
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        button:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body>
+    <h1>🧪 Test Media Upload - AutoPost VN</h1>
+    
+    <div class="upload-area" onclick="document.getElementById('fileInput').click()">
+        <p>📁 Kéo thả file vào đây hoặc click để chọn</p>
+        <p><small>Hỗ trợ: JPG, PNG, GIF, WEBP (max 10MB) | MP4, MOV, AVI (max 100MB)</small></p>
+    </div>
+    
+    <input type="file" id="fileInput" multiple accept="image/*,video/*" style="display: none;">
+    
+    <div>
+        <button onclick="testSingleUpload()">Test Single File</button>
+        <button onclick="testMultipleUpload()">Test Multiple Files</button>
+        <button onclick="testLargeFile()">Test Large File</button>
+        <button onclick="testInvalidType()">Test Invalid Type</button>
+        <button onclick="clearResults()">Clear Results</button>
+    </div>
+    
+    <div id="fileList" class="file-list"></div>
+    <div id="results"></div>
+
+    <script>
+        const fileInput = document.getElementById('fileInput');
+        const fileList = document.getElementById('fileList');
+        const results = document.getElementById('results');
+        
+        fileInput.addEventListener('change', handleFiles);
+        
+        // Drag and drop
+        document.querySelector('.upload-area').addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.currentTarget.style.borderColor = '#007bff';
+            e.currentTarget.style.backgroundColor = '#f8f9fa';
+        });
+        
+        document.querySelector('.upload-area').addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            e.currentTarget.style.borderColor = '#ccc';
+            e.currentTarget.style.backgroundColor = 'transparent';
+        });
+        
+        document.querySelector('.upload-area').addEventListener('drop', (e) => {
+            e.preventDefault();
+            e.currentTarget.style.borderColor = '#ccc';
+            e.currentTarget.style.backgroundColor = 'transparent';
+            
+            const files = e.dataTransfer.files;
+            handleFiles({ target: { files } });
+        });
+        
+        function handleFiles(event) {
+            const files = Array.from(event.target.files);
+            uploadFiles(files);
+        }
+        
+        async function uploadFiles(files) {
+            fileList.innerHTML = '';
+            
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                await uploadSingleFile(file, i);
+            }
+        }
+        
+        async function uploadSingleFile(file, index) {
+            // Create file item UI
+            const fileItem = document.createElement('div');
+            fileItem.className = 'file-item';
+            fileItem.innerHTML = `
+                <div>
+                    <strong>${file.name}</strong><br>
+                    <small>${file.type} - ${(file.size / 1024 / 1024).toFixed(2)} MB</small>
+                </div>
+                <div id="status-${index}">Preparing...</div>
+            `;
+            fileList.appendChild(fileItem);
+            
+            // Create progress bar
+            const progress = document.createElement('div');
+            progress.className = 'progress';
+            progress.innerHTML = '<div class="progress-bar" id="progress-' + index + '" style="width: 0%"></div>';
+            fileItem.appendChild(progress);
+            
+            const statusEl = document.getElementById(`status-${index}`);
+            const progressBar = document.getElementById(`progress-${index}`);
+            
+            try {
+                statusEl.textContent = 'Uploading...';
+                progressBar.style.width = '30%';
+                
+                const formData = new FormData();
+                formData.append('file', file);
+                
+                const response = await fetch('/api/media/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                progressBar.style.width = '80%';
+                
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || 'Upload failed');
+                }
+                
+                const data = await response.json();
+                progressBar.style.width = '100%';
+                statusEl.textContent = '✅ Success';
+                statusEl.style.color = 'green';
+                
+                // Show result
+                showResult('success', `Upload thành công: ${file.name}`, data);
+                
+            } catch (error) {
+                progressBar.style.width = '100%';
+                progressBar.style.backgroundColor = '#dc3545';
+                statusEl.textContent = '❌ Failed';
+                statusEl.style.color = 'red';
+                
+                showResult('error', `Upload thất bại: ${file.name}`, { error: error.message });
+            }
+        }
+        
+        function showResult(type, message, data) {
+            const resultDiv = document.createElement('div');
+            resultDiv.className = `result ${type}`;
+            resultDiv.innerHTML = `
+                <strong>${message}</strong>
+                <pre>${JSON.stringify(data, null, 2)}</pre>
+            `;
+            results.appendChild(resultDiv);
+        }
+        
+        // Test functions
+        function testSingleUpload() {
+            // Create a small test image
+            const canvas = document.createElement('canvas');
+            canvas.width = 100;
+            canvas.height = 100;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#007bff';
+            ctx.fillRect(0, 0, 100, 100);
+            ctx.fillStyle = 'white';
+            ctx.font = '16px Arial';
+            ctx.fillText('TEST', 30, 55);
+            
+            canvas.toBlob((blob) => {
+                const file = new File([blob], 'test-image.png', { type: 'image/png' });
+                uploadFiles([file]);
+            });
+        }
+        
+        function testMultipleUpload() {
+            // Create multiple test files
+            const files = [];
+            for (let i = 1; i <= 3; i++) {
+                const canvas = document.createElement('canvas');
+                canvas.width = 100;
+                canvas.height = 100;
+                const ctx = canvas.getContext('2d');
+                ctx.fillStyle = `hsl(${i * 120}, 70%, 50%)`;
+                ctx.fillRect(0, 0, 100, 100);
+                ctx.fillStyle = 'white';
+                ctx.font = '14px Arial';
+                ctx.fillText(`IMG${i}`, 30, 55);
+                
+                canvas.toBlob((blob) => {
+                    const file = new File([blob], `test-image-${i}.png`, { type: 'image/png' });
+                    files.push(file);
+                    if (files.length === 3) {
+                        uploadFiles(files);
+                    }
+                });
+            }
+        }
+        
+        function testLargeFile() {
+            // Create a large file (simulate)
+            const largeData = new Array(15 * 1024 * 1024).fill(0); // 15MB
+            const blob = new Blob([new Uint8Array(largeData)], { type: 'image/jpeg' });
+            const file = new File([blob], 'large-test-file.jpg', { type: 'image/jpeg' });
+            uploadFiles([file]);
+        }
+        
+        function testInvalidType() {
+            // Create an invalid file type
+            const blob = new Blob(['test content'], { type: 'text/plain' });
+            const file = new File([blob], 'test.txt', { type: 'text/plain' });
+            uploadFiles([file]);
+        }
+        
+        function clearResults() {
+            results.innerHTML = '';
+            fileList.innerHTML = '';
+        }
+    </script>
+</body>
+</html>

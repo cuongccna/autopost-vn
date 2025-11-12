@@ -18,25 +18,7 @@ import {
 import { PROVIDERS } from '@/lib/constants';
 import { useActivityLogger } from '@/hooks/useActivityLogger';
 import PostDetailModal from './PostDetailModal';
-
-interface Post {
-  id: string;
-  title: string;
-  datetime: string;
-  providers: string[];
-  status: 'scheduled' | 'published' | 'failed';
-  content?: string;
-  error?: string;
-  mediaUrls?: string[];
-}
-
-interface CalendarProps {
-  posts: Post[];
-  onUpdatePost?: (_postId: string, _updates: Partial<Post>) => void;
-  onDeletePost?: (_postId: string) => void;
-  onEditPost?: (_post: Post) => void;
-  onCreatePost?: (_date: Date) => void;
-}
+import type { Post } from '@/types/Post';
 
 function formatTime(date: Date): string {
   return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -360,7 +342,13 @@ function DroppableColumn({ date, posts, dayName, dayIndex, onPostClick, onCreate
   );
 }
 
-export default function Calendar({ posts, onUpdatePost, onDeletePost, onEditPost, onCreatePost }: CalendarProps) {
+export default function Calendar({ posts, onUpdatePost, onDeletePost, onEditPost, onCreatePost }: {
+  posts: Post[];
+  onUpdatePost?: (_postId: string, _updates: Partial<Post>) => void;
+  onDeletePost?: (_postId: string) => void;
+  onEditPost?: (_post: Post) => void;
+  onCreatePost?: (_date: Date) => void;
+}) {
   const { logPostAction } = useActivityLogger();
   const [activePost, setActivePost] = useState<Post | null>(null);
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);

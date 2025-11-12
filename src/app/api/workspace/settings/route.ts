@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { sbServer } from '@/lib/supabase/server';
+import { query, update as updateRecord } from '@/lib/db/postgres';
 import logger from '@/lib/utils/logger';
 
 // Default workspace settings
@@ -44,68 +44,39 @@ export async function GET(request: NextRequest) {
       workspaceId,
     });
     
-    const supabase = sbServer();
-    
-    // If no workspace_id provided, get user's default workspace
+    // Get user's workspace
     let targetWorkspaceId = workspaceId;
+    
     if (!targetWorkspaceId) {
-      console.log('⚠️ No workspaceId provided, finding default workspace for user:', userId);
+      // Find workspace by user_id
+      const wsResult = await query(
+        'SELECT id FROM autopostvn_workspaces WHERE user_id = $1 LIMIT 1',
+        [userId]
+      );
       
-      // Try multiple strategies to find workspace
-      // Strategy 1: Find by user slug
-      const userSlug = `user-${userId.replace(/-/g, '').substring(0, 8)}`;
-      console.log('🔍 Searching for workspace with slug:', userSlug);
-      
-      let { data: workspace, error: slugError } = await supabase
-        .from('autopostvn_workspaces')
-        .select('id, slug')
-        .eq('slug', userSlug)
-        .single();
-      
-      if (slugError || !workspace) {
-        console.log('⚠️ Workspace not found by slug, trying to find any workspace...');
-        
-        // Strategy 2: Get the first workspace (fallback)
-        const { data: workspaces, error: listError } = await supabase
-          .from('autopostvn_workspaces')
-          .select('id, slug')
-          .limit(1);
-        
-        if (listError || !workspaces || workspaces.length === 0) {
-          console.error('❌ No workspaces found in database');
-          return NextResponse.json(
-            { error: 'Workspace not found. Please create a workspace first.' },
-            { status: 404 }
-          );
-        }
-        
-        workspace = workspaces[0];
-        console.log('✅ Using first available workspace:', workspace);
-      } else {
-        console.log('✅ Found workspace by slug:', workspace);
+      if (wsResult.rows.length === 0) {
+        logger.error('No workspace found for user', { userId });
+        return NextResponse.json(
+          { error: 'No workspace found. Please create a workspace first.' },
+          { status: 404 }
+        );
       }
       
-      targetWorkspaceId = workspace.id;
+      targetWorkspaceId = wsResult.rows[0].id;
     }
     
     console.log('🎯 Target workspace ID:', targetWorkspaceId);
     
     // Get workspace settings
-    const { data: workspace, error } = await supabase
-      .from('autopostvn_workspaces')
-      .select('id, name, slug, settings')
-      .eq('id', targetWorkspaceId)
-      .single();
+    const result = await query(
+      'SELECT id, name, slug, settings FROM autopostvn_workspaces WHERE id = $1 LIMIT 1',
+      [targetWorkspaceId]
+    );
     
-    if (error) {
-      logger.error('Failed to fetch workspace settings', { error, workspaceId: targetWorkspaceId });
-      return NextResponse.json(
-        { error: 'Failed to fetch workspace settings' },
-        { status: 500 }
-      );
-    }
+    const workspace = result.rows[0];
     
     if (!workspace) {
+      logger.error('Failed to fetch workspace settings', { workspaceId: targetWorkspaceId });
       return NextResponse.json(
         { error: 'Workspace not found' },
         { status: 404 }
@@ -175,48 +146,25 @@ export async function PUT(request: NextRequest) {
       );
     }
     
-    const supabase = sbServer();
-    
-    // If no workspace_id provided, get user's default workspace
+    // Get user's workspace
     let targetWorkspaceId = workspaceId;
+    
     if (!targetWorkspaceId) {
-      console.log('⚠️ No workspaceId provided, finding default workspace for user:', userId);
+      // Find workspace by user_id
+      const wsResult = await query(
+        'SELECT id FROM autopostvn_workspaces WHERE user_id = $1 LIMIT 1',
+        [userId]
+      );
       
-      // Try multiple strategies to find workspace
-      // Strategy 1: Find by user slug
-      const userSlug = `user-${userId.replace(/-/g, '').substring(0, 8)}`;
-      console.log('🔍 Searching for workspace with slug:', userSlug);
-      
-      let { data: workspace, error: slugError } = await supabase
-        .from('autopostvn_workspaces')
-        .select('id, slug')
-        .eq('slug', userSlug)
-        .single();
-      
-      if (slugError || !workspace) {
-        console.log('⚠️ Workspace not found by slug, trying to find any workspace...');
-        
-        // Strategy 2: Get the first workspace (fallback)
-        const { data: workspaces, error: listError } = await supabase
-          .from('autopostvn_workspaces')
-          .select('id, slug')
-          .limit(1);
-        
-        if (listError || !workspaces || workspaces.length === 0) {
-          console.error('❌ No workspaces found in database');
-          return NextResponse.json(
-            { error: 'Workspace not found. Please create a workspace first.' },
-            { status: 404 }
-          );
-        }
-        
-        workspace = workspaces[0];
-        console.log('✅ Using first available workspace:', workspace);
-      } else {
-        console.log('✅ Found workspace by slug:', workspace);
+      if (wsResult.rows.length === 0) {
+        logger.error('No workspace found for user', { userId });
+        return NextResponse.json(
+          { error: 'No workspace found. Please create a workspace first.' },
+          { status: 404 }
+        );
       }
       
-      targetWorkspaceId = workspace.id;
+      targetWorkspaceId = wsResult.rows[0].id;
     }
     
     console.log('🎯 Target workspace ID:', targetWorkspaceId);
@@ -243,23 +191,21 @@ export async function PUT(request: NextRequest) {
     };
     
     // Update workspace settings
-    const { data: updatedWorkspace, error } = await supabase
-      .from('autopostvn_workspaces')
-      .update({ 
-        settings: validatedSettings,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', targetWorkspaceId)
-      .select('id, name, slug, settings')
-      .single();
+    const updated = await updateRecord(
+      'autopostvn_workspaces',
+      { settings: validatedSettings }, // Don't stringify - PostgreSQL JSONB handles this
+      { id: targetWorkspaceId }
+    );
     
-    if (error) {
-      logger.error('Failed to update workspace settings', { error, workspaceId: targetWorkspaceId });
+    if (!updated || updated.length === 0) {
+      logger.error('Failed to update workspace settings', { workspaceId: targetWorkspaceId });
       return NextResponse.json(
         { error: 'Failed to update workspace settings' },
         { status: 500 }
       );
     }
+    
+    const updatedWorkspace = updated[0];
     
     logger.info('Workspace settings updated', { 
       workspaceId: targetWorkspaceId,
@@ -272,7 +218,7 @@ export async function PUT(request: NextRequest) {
       workspaceId: updatedWorkspace.id,
       workspaceName: updatedWorkspace.name,
       workspaceSlug: updatedWorkspace.slug,
-      settings: updatedWorkspace.settings,
+      settings: updatedWorkspace.settings || validatedSettings, // Use returned settings or fallback
       message: 'Workspace settings updated successfully',
     });
     

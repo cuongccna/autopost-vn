@@ -1,9 +1,9 @@
-import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import jwt from 'jsonwebtoken';
-import { sendUpgradeRequestToAdmin } from '@/lib/email/resend';
+import { query } from '@/lib/db/postgres';
+import { emailService } from '@/lib/services/emailService';
 
 export async function POST(request: Request) {
   try {
@@ -17,11 +17,6 @@ export async function POST(request: Request) {
       );
     }
 
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    );
-
     const body = await request.json();
     const { targetPlan } = body;
 
@@ -34,45 +29,42 @@ export async function POST(request: Request) {
 
     // Get user info from database
     const userId = (session.user as any).id || session.user.email;
-    
+
     console.log('🔍 Looking up user in database:', {
       userId,
       email: session.user.email
     });
 
-    // Find user by id (not auth_user_id, as that column doesn't exist)
-    const { data: users, error: userError } = await supabase
-      .from('autopostvn_users')
-      .select('id, email, full_name, user_role')
-      .eq('id', userId)
-      .limit(1);
+    // Find user by id
+    const userResult = await query(
+      'SELECT id, email, full_name, user_role FROM autopostvn_users WHERE id = $1 LIMIT 1',
+      [userId]
+    );
 
-    let dbUser = users && users.length > 0 ? users[0] : null;
+    let dbUser = userResult.rows.length > 0 ? userResult.rows[0] : null;
 
     if (!dbUser) {
       // Fallback: Try to find by email
       console.log('⚠️ User not found by id, trying email:', session.user.email);
-      const { data: usersByEmail } = await supabase
-        .from('autopostvn_users')
-        .select('id, email, full_name, user_role')
-        .eq('email', session.user.email)
-        .limit(1);
+      const userByEmailResult = await query(
+        'SELECT id, email, full_name, user_role FROM autopostvn_users WHERE email = $1 LIMIT 1',
+        [session.user.email]
+      );
 
-      if (usersByEmail && usersByEmail.length > 0) {
-        dbUser = usersByEmail[0];
+      if (userByEmailResult.rows.length > 0) {
+        dbUser = userByEmailResult.rows[0];
         console.log('✓ Found user by email');
       }
     }
 
-    if (userError || !dbUser) {
+    if (!dbUser) {
       console.error('❌ User not found in database:', {
         userId,
-        email: session.user.email,
-        error: userError
+        email: session.user.email
       });
-      
+
       return NextResponse.json(
-        { 
+        {
           error: 'User not found in database',
           details: 'Please contact admin: cuong.vhcc@gmail.com'
         },
@@ -111,7 +103,7 @@ export async function POST(request: Request) {
     );
 
     // Send email to admin
-    const emailResult = await sendUpgradeRequestToAdmin({
+    const emailSent = await emailService.sendUpgradeRequestToAdmin({
       userName: dbUser.full_name || dbUser.email,
       userEmail: dbUser.email,
       targetPlan,
@@ -119,7 +111,7 @@ export async function POST(request: Request) {
       activationToken
     });
 
-    if (!emailResult.success) {
+    if (!emailSent) {
       return NextResponse.json(
         { error: 'Failed to send upgrade request email' },
         { status: 500 }

@@ -1,4 +1,4 @@
-import { sbServer } from '@/lib/supabase/server';
+import { query } from '@/lib/db/postgres';
 import { validatePostForPublishing, logValidationActivity, ValidationResult } from '@/lib/post-validation';
 import { createPublisher, logPublishActivity, PublishResult, PublishData } from '@/lib/social-publishers';
 import { WorkspaceSettingsService } from '@/lib/services/workspace-settings.service';
@@ -11,6 +11,7 @@ interface ScheduleJob {
   scheduled_at: string;
   status: string;
   retry_count: number;
+  user_id: string;
 }
 
 interface ProcessingResult {
@@ -32,7 +33,6 @@ interface ProcessingResult {
 export async function runScheduler(limit = 10): Promise<ProcessingResult> {
   console.log(`🔄 [SCHEDULER] Starting scheduler run with limit: ${limit}`);
   
-  const sb = sbServer(true);
   // Allow 5 minutes leeway to absorb client timezone drift and near-future scheduling
   const nowLeeway = new Date(Date.now() + 5 * 60 * 1000).toISOString();
   const result: ProcessingResult = {
@@ -45,25 +45,24 @@ export async function runScheduler(limit = 10): Promise<ProcessingResult> {
 
   try {
     // Lấy các job cần xử lý (đã đến thời gian và status = 'pending')
-    const { data: jobs, error: jobsError } = await sb
-      .from('autopostvn_post_schedules')
-      .select(`
-        id,
-        post_id,
-        social_account_id,
-        scheduled_at,
-        status,
-        retry_count
-      `)
-      .lte('scheduled_at', nowLeeway)
-      .eq('status', 'pending')
-      .order('scheduled_at', { ascending: true })
-      .limit(limit);
+    const jobsResult = await query<ScheduleJob>(`
+      SELECT 
+        ps.id, 
+        ps.post_id, 
+        ps.social_account_id, 
+        ps.scheduled_at, 
+        ps.status, 
+        ps.retry_count,
+        p.user_id
+      FROM autopostvn_post_schedules ps
+      JOIN autopostvn_posts p ON p.id = ps.post_id
+      WHERE ps.scheduled_at <= $1
+        AND ps.status = 'pending'
+      ORDER BY ps.scheduled_at ASC
+      LIMIT $2
+    `, [nowLeeway, limit]);
 
-    if (jobsError) {
-      console.error('❌ [SCHEDULER] Error fetching jobs:', jobsError);
-      throw jobsError;
-    }
+    const jobs = jobsResult.rows;
 
     if (!jobs || jobs.length === 0) {
       console.log('✅ [SCHEDULER] No pending jobs found');
@@ -73,12 +72,13 @@ export async function runScheduler(limit = 10): Promise<ProcessingResult> {
     console.log(`📋 [SCHEDULER] Found ${jobs.length} pending jobs`);
 
     // Đánh dấu jobs đang được xử lý (idempotent protection: only if still pending)
-    const jobIds = jobs.map(j => j.id);
-    await sb
-      .from('autopostvn_post_schedules')
-      .update({ status: 'publishing', updated_at: new Date().toISOString() })
-      .in('id', jobIds)
-      .eq('status', 'pending');
+    for (const job of jobs) {
+      await query(`
+        UPDATE autopostvn_post_schedules
+        SET status = 'publishing', updated_at = NOW()
+        WHERE id = $1 AND status = 'pending'
+      `, [job.id]);
+    }
 
     // Xử lý từng job
     for (const job of jobs) {
@@ -90,8 +90,8 @@ export async function runScheduler(limit = 10): Promise<ProcessingResult> {
         console.log(`🔍 [SCHEDULER] Validating post ${job.post_id}`);
         const validation = await validatePostForPublishing(job.post_id);
         
-        // Log validation activity
-        await logValidationActivity(job.post_id, validation.result);
+        // Log validation activity with user_id from job
+        await logValidationActivity(job.post_id, validation.result, job.user_id);
 
         if (!validation.result.isValid) {
           const errorMessage = `Validation failed: ${validation.result.errors.join(', ')}`;
@@ -158,10 +158,11 @@ export async function runScheduler(limit = 10): Promise<ProcessingResult> {
           console.log(`⏸️ [SCHEDULER] ${errorMessage}`);
           
           // Reset status to pending for later retry
-          await sb
-            .from('autopostvn_post_schedules')
-            .update({ status: 'pending', updated_at: new Date().toISOString() })
-            .eq('id', job.id);
+          await query(`
+            UPDATE autopostvn_post_schedules
+            SET status = 'pending', updated_at = NOW()
+            WHERE id = $1
+          `, [job.id]);
           
           result.skipped++;
           result.details.push({
@@ -185,11 +186,11 @@ export async function runScheduler(limit = 10): Promise<ProcessingResult> {
 
         const publisher = createPublisher(socialAccount);
         // Idempotency: skip if already published by concurrent worker
-        const { data: freshJob } = await sb
-          .from('autopostvn_post_schedules')
-          .select('status')
-          .eq('id', job.id)
-          .single();
+        const freshJobResult = await query<{status: string}>(`
+          SELECT status FROM autopostvn_post_schedules WHERE id = $1
+        `, [job.id]);
+        
+        const freshJob = freshJobResult.rows[0];
         if (freshJob?.status === 'published') {
           console.log(`⏩ [SCHEDULER] Job ${job.id} already published, skipping`);
           result.skipped++;
@@ -241,15 +242,15 @@ export async function runScheduler(limit = 10): Promise<ProcessingResult> {
           const shouldRetry = job.retry_count < 3; // Max 3 retries
           if (shouldRetry) {
             const retryAt = new Date(Date.now() + (job.retry_count + 1) * 30 * 60 * 1000); // Retry sau 30 phút, 1 giờ, 1.5 giờ
-            await sb
-              .from('autopostvn_post_schedules')
-              .update({
-                status: 'pending',
-                retry_count: job.retry_count + 1,
-                scheduled_at: retryAt.toISOString(),
-                error_message: publishResult.error
-              })
-              .eq('id', job.id);
+            await query(`
+              UPDATE autopostvn_post_schedules
+              SET status = 'pending',
+                  retry_count = $1,
+                  scheduled_at = $2,
+                  error_message = $3,
+                  updated_at = NOW()
+              WHERE id = $4
+            `, [job.retry_count + 1, retryAt.toISOString(), publishResult.error, job.id]);
               
             result.details.push({
               scheduleId: job.id,
@@ -308,30 +309,34 @@ async function updateJobStatus(
   errorMessage?: string, 
   externalPostId?: string
 ) {
-  const sb = sbServer(true);
-  
-  const updateData: any = {
-    status,
-    updated_at: new Date().toISOString()
-  };
+  const updates: string[] = ['status = $1', 'updated_at = NOW()'];
+  const params: any[] = [status];
+  let paramIndex = 2;
 
   if (status === 'published') {
-    updateData.published_at = new Date().toISOString();
+    updates.push('published_at = NOW()');
     if (externalPostId) {
-      updateData.external_post_id = externalPostId;
+      updates.push(`external_post_id = $${paramIndex}`);
+      params.push(externalPostId);
+      paramIndex++;
     }
   }
 
   if (errorMessage) {
-    updateData.error_message = errorMessage;
+    updates.push(`error_message = $${paramIndex}`);
+    params.push(errorMessage);
+    paramIndex++;
   }
 
-  const { error } = await sb
-    .from('autopostvn_post_schedules')
-    .update(updateData)
-    .eq('id', jobId);
+  params.push(jobId);
 
-  if (error) {
+  try {
+    await query(`
+      UPDATE autopostvn_post_schedules
+      SET ${updates.join(', ')}
+      WHERE id = $${paramIndex}
+    `, params);
+  } catch (error: any) {
     console.error(`Failed to update job status for ${jobId}:`, error);
   }
 }
@@ -340,44 +345,38 @@ async function updateJobStatus(
  * Kiểm tra và cập nhật trạng thái post khi tất cả schedules hoàn thành
  */
 async function checkAndUpdatePostStatus(postId: string) {
-  const sb = sbServer(true);
-
   try {
     // Lấy tất cả schedules của post
-    const { data: schedules, error } = await sb
-      .from('autopostvn_post_schedules')
-      .select('status')
-      .eq('post_id', postId);
-
-    if (error) {
-      console.error(`Error checking post schedules for ${postId}:`, error);
-      return;
-    }
+    const schedulesResult = await query<{status: string}>(`
+      SELECT status FROM autopostvn_post_schedules WHERE post_id = $1
+    `, [postId]);
+    
+    const schedules = schedulesResult.rows;
 
     if (!schedules || schedules.length === 0) {
       return;
     }
 
     // Kiểm tra trạng thái
-    const allCompleted = schedules.every(s => ['published', 'failed'].includes(s.status));
-    const hasSuccessful = schedules.some(s => s.status === 'published');
+    const allCompleted = schedules.every((s: {status: string}) => ['published', 'failed'].includes(s.status));
+    const hasSuccessful = schedules.some((s: {status: string}) => s.status === 'published');
     
     if (allCompleted) {
       const newStatus = hasSuccessful ? 'published' : 'failed';
       
-      const updateData: any = {
-        status: newStatus,
-        updated_at: new Date().toISOString()
-      };
-
       if (newStatus === 'published') {
-        updateData.published_at = new Date().toISOString();
+        await query(`
+          UPDATE autopostvn_posts
+          SET status = $1, published_at = NOW(), updated_at = NOW()
+          WHERE id = $2
+        `, [newStatus, postId]);
+      } else {
+        await query(`
+          UPDATE autopostvn_posts
+          SET status = $1, updated_at = NOW()
+          WHERE id = $2
+        `, [newStatus, postId]);
       }
-
-      await sb
-        .from('autopostvn_posts')
-        .update(updateData)
-        .eq('id', postId);
 
       console.log(`📊 [SCHEDULER] Updated post ${postId} status to: ${newStatus}`);
     }

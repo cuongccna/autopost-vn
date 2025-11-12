@@ -1,11 +1,7 @@
 import { NextAuthOptions } from "next-auth"
 import CredentialsProvider from "next-auth/providers/credentials"
-import { createClient } from '@supabase/supabase-js'
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+import { query } from '@/lib/db/postgres'
+import bcrypt from 'bcryptjs'
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -21,49 +17,56 @@ export const authOptions: NextAuthOptions = {
         }
 
         try {
-          // Check user in Supabase auth
-          const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-            email: credentials.email,
-            password: credentials.password,
-          })
+          // Find user by email in users table
+          const result = await query(
+            `SELECT * FROM autopostvn_users WHERE email = $1 LIMIT 1`,
+            [credentials.email]
+          )
 
-          if (authError || !authData.user) {
+          if (result.rows.length === 0) {
+            console.log('User not found:', credentials.email)
             return null
           }
 
-          // Get user profile data
-          const { data: profile, error: profileError } = await supabase
-            .from('user_profiles')
-            .select('*')
-            .eq('id', authData.user.id)
-            .single()
+          const user = result.rows[0]
+          
+          // Verify password
+          if (!user.password_hash) {
+            console.log('No password hash found')
+            return null
+          }
 
-          if (profileError) {
-            // Create profile if doesn't exist
-            const { data: newProfile } = await supabase
-              .from('user_profiles')
-              .insert({
-                id: authData.user.id,
-                email: authData.user.email,
-                full_name: authData.user.user_metadata?.full_name || '',
-                avatar_url: authData.user.user_metadata?.avatar_url || ''
-              })
-              .select()
-              .single()
+          const passwordValid = await bcrypt.compare(credentials.password, user.password_hash)
+          if (!passwordValid) {
+            console.log('Invalid password')
+            return null
+          }
 
-            return {
-              id: authData.user.id,
-              email: authData.user.email!,
-              name: newProfile?.full_name || '',
-              image: newProfile?.avatar_url || ''
-            }
+          // Auto-create workspace if not exists (1:1 mapping with user)
+          const workspaceResult = await query(
+            `SELECT id FROM autopostvn_workspaces WHERE user_id = $1 LIMIT 1`,
+            [user.id]
+          )
+
+          if (workspaceResult.rows.length === 0) {
+            console.log(`Creating workspace for user ${user.id} (${user.email})`);
+            await query(
+              `INSERT INTO autopostvn_workspaces (user_id, name, slug, settings, created_at, updated_at)
+               VALUES ($1, $2, $3, $4, NOW(), NOW())`,
+              [
+                user.id,  // ✅ Set user_id
+                `${user.full_name || user.email}'s Workspace`,
+                `user-${user.id.substring(0, 8)}`,
+                JSON.stringify({})
+              ]
+            )
           }
 
           return {
-            id: authData.user.id,
-            email: authData.user.email!,
-            name: profile.full_name || '',
-            image: profile.avatar_url || ''
+            id: user.id,
+            email: user.email,
+            name: user.full_name || user.email,
+            image: user.avatar_url || ''
           }
         } catch (error) {
           console.error('Auth error:', error)
@@ -103,27 +106,21 @@ export const authOptions: NextAuthOptions = {
     async jwt({ token, user }) {
       if (user) {
         token.id = user.id
-        // Get user's role from Supabase
+        // Get user's role from user record, not workspace
         try {
-          // First try to get from auth.users user_metadata
-          const { data: authUser } = await supabase.auth.admin.getUserById(user.id);
-          if (authUser.user) {
-            token.user_role = authUser.user.user_metadata?.user_role || 
-                             authUser.user.app_metadata?.role || 
-                             'free';
+          const result = await query(
+            'SELECT user_role FROM autopostvn_users WHERE id = $1 LIMIT 1',
+            [user.id]
+          )
+          
+          if (result.rows.length > 0) {
+            token.user_role = result.rows[0].user_role || 'free'
           } else {
-            // Fallback: get from our custom users table
-            const { data: userData } = await supabase
-              .from('autopostvn_users')
-              .select('user_role')
-              .eq('id', user.id)
-              .single();
-            
-            token.user_role = userData?.user_role || 'free';
+            token.user_role = 'free'
           }
         } catch (error) {
-          console.error('Error fetching user role:', error);
-          token.user_role = 'free';
+          console.error('Error fetching user role:', error)
+          token.user_role = 'free'
         }
       }
       return token
