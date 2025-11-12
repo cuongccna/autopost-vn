@@ -59,7 +59,7 @@ export default function MediaLibraryPicker({
       const response = await fetch(`/api/media?${params.toString()}`);
       if (response.ok) {
         const data = await response.json();
-        setMedia(data.media || []);
+        setMedia(data.items ?? data.media ?? []);
       }
     } catch (error) {
       console.error('Failed to load media:', error);

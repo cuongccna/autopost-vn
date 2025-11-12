@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
@@ -38,6 +38,34 @@ interface ComposeData {
   };
 }
 
+type ComposeDataKeys = keyof ComposeData;
+
+const isShallowEqual = (a?: Record<string, any>, b?: Record<string, any>) => {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  const aKeys = Object.keys(a);
+  const bKeys = Object.keys(b);
+  if (aKeys.length !== bKeys.length) return false;
+  for (const key of aKeys) {
+    if (a[key] !== b[key]) {
+      return false;
+    }
+  }
+  return true;
+};
+
+const areArraysEqual = (a?: any[], b?: any[]) => {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i += 1) {
+    if (a[i] !== b[i]) {
+      return false;
+    }
+  }
+  return true;
+};
+
 export default function ComposePage() {
   const router = useRouter();
   const { data: session, status } = useSession();
@@ -63,7 +91,7 @@ export default function ComposePage() {
   });
   
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const handleComposeDataChange = (updates: Partial<ComposeData>) => {
+  const handleComposeDataChange = useCallback((updates: Partial<ComposeData>) => {
     setComposeData(prev => {
       const next: Partial<ComposeData> = {
         ...prev,
@@ -81,9 +109,36 @@ export default function ComposePage() {
         next.metadata = mergedMetadata;
       }
 
-      return next;
+      let hasChanges = false;
+
+      if (updates.metadata) {
+        const prevMeta = prev?.metadata;
+        if (!isShallowEqual(prevMeta as Record<string, any> | undefined, next.metadata as Record<string, any> | undefined)) {
+          hasChanges = true;
+        }
+      }
+
+      for (const [key, value] of Object.entries(updates)) {
+        if (key === 'metadata') continue;
+        const typedKey = key as ComposeDataKeys;
+        const prevValue = prev?.[typedKey];
+        if (Array.isArray(value) && Array.isArray(prevValue)) {
+          if (!areArraysEqual(prevValue, value)) {
+            hasChanges = true;
+            break;
+          }
+          continue;
+        }
+
+        if (value !== prevValue) {
+          hasChanges = true;
+          break;
+        }
+      }
+
+      return hasChanges ? next : prev;
     });
-  };
+  }, [setComposeData]);
 
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [submissionResult, setSubmissionResult] = useState<any>(null);
@@ -101,10 +156,6 @@ export default function ComposePage() {
     getRateLimitMessage 
   } = usePostRateLimit();
   
-  // Debug logs
-  console.log('📄 ComposePage - rateLimitData:', rateLimitData);
-  console.log('📄 ComposePage - getRateLimitMessage:', getRateLimitMessage);
-
   // Check authentication and connected accounts
   useEffect(() => {
     // 🚨 EMERGENCY: Disable rate limit check to prevent infinite loop

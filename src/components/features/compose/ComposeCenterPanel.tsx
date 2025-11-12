@@ -6,7 +6,7 @@ import MediaLibraryPicker from '@/components/features/media/MediaLibraryPicker';
 import ContentEditor from '@/components/ui/ContentEditor';
 import HashtagItem from '@/components/ui/HashtagItem';
 import { FileText, FolderOpen, Info } from 'lucide-react';
-import { buildAIContextFromComposeData } from '@/lib/utils/build-ai-context';
+import AIQuickActions from '@/components/features/compose/AIQuickActions';
 
 interface ComposeData {
   title: string;
@@ -63,10 +63,6 @@ export default function ComposeCenterPanel({
   const [hashtagRecommendations, setHashtagRecommendations] = useState<string[]>([]);
   
   // AI Loading states
-  const [aiLoading, setAiLoading] = useState({
-    content: false,
-    hashtags: false
-  });
 
   const handleTitleChange = (title: string) => {
     onDataChange({
@@ -92,6 +88,8 @@ export default function ComposeCenterPanel({
         hashtags
       }
     });
+    setHashtagValidation(null);
+    setHashtagRecommendations([]);
   };
 
   const handleCTAChange = (cta: string) => {
@@ -160,151 +158,7 @@ export default function ComposeCenterPanel({
     handleImagesChange([...uploadedMedia, ...mediaForUpload]);
   };
 
-  // Generate AI content
-  const handleGenerateContent = async () => {
-    console.log('🚀 AI Content generation started');
-    setAiLoading(prev => ({ ...prev, content: true }));
-    
-    try {
-      const response = await fetch('/api/ai/caption', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          platform: (composeData.metadata?.platform || 'Facebook Page').toLowerCase().replace(' page', ''),
-          title: composeData.title || '',
-          content: composeData.content || '',
-          tone: 'exciting',
-          targetAudience: 'general',
-          aiContext: buildAIContextFromComposeData(composeData),
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        
-        if (response.status === 429) {
-          showToast?.({
-            message: errorData.message || 'Bạn đã hết số lần sử dụng AI để tạo nội dung. Vui lòng nâng cấp tài khoản hoặc thử lại sau.',
-            type: 'warning',
-            title: 'Đã hết lượt tạo nội dung AI'
-          });
-        } else {
-          showToast?.({
-            message: errorData.error || 'Có lỗi xảy ra khi tạo nội dung AI',
-            type: 'error',
-            title: 'Lỗi tạo nội dung'
-          });
-        }
-        return;
-      }
-
-      const data = await response.json();
-      if (data.caption) {
-        handleContentChange(data.caption);
-        showToast?.({
-          message: 'Nội dung đã được tạo thành công bằng AI',
-          type: 'success',
-          title: 'Tạo nội dung thành công'
-        });
-      }
-    } catch (error) {
-      console.error('Error generating content:', error);
-      showToast?.({
-        message: 'Có lỗi xảy ra khi tạo nội dung AI',
-        type: 'error',
-        title: 'Lỗi tạo nội dung'
-      });
-    } finally {
-      console.log('🔄 AI Content generation finished');
-      setAiLoading(prev => ({ ...prev, content: false }));
-    }
-  };
-
-  // Generate hashtags
-  const handleGenerateHashtags = async () => {
-    console.log('🚀 AI Hashtags generation started');
-    setAiLoading(prev => ({ ...prev, hashtags: true }));
-    
-    try {
-      const response = await fetch('/api/ai/hashtags', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          platform: (composeData.metadata?.platform || 'Facebook Page').toLowerCase().replace(' page', ''),
-          title: composeData.title || '',
-          content: composeData.content || '',
-          count: 8
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        
-        if (response.status === 429) {
-          showToast?.({
-            message: errorData.message || 'Bạn đã hết số lần sử dụng AI để tạo hashtags. Vui lòng nâng cấp tài khoản hoặc thử lại sau.',
-            type: 'warning',
-            title: 'Đã hết lượt tạo hashtags AI'
-          });
-        } else {
-          showToast?.({
-            message: errorData.error || 'Có lỗi xảy ra khi tạo hashtags AI',
-            type: 'error',
-            title: 'Lỗi tạo hashtags'
-          });
-        }
-        return;
-      }
-
-      const data = await response.json();
-      if (data.hashtags) {
-        const hashtags = Array.isArray(data.hashtags) ? data.hashtags.join(' ') : data.hashtags;
-        handleHashtagsChange(hashtags);
-        
-        // Store validation results
-        setHashtagValidation(data.validation);
-        setHashtagRecommendations(data.recommendations || []);
-        
-        // Show summary in toast
-        const summary = data.validation?.summary;
-        let toastMessage = 'Hashtags đã được tạo thành công bằng AI';
-        if (summary) {
-          toastMessage += ` (✅ ${summary.valid} | ⚠️ ${summary.warnings} | ❌ ${summary.errors})`;
-        }
-        
-        showToast?.({
-          message: toastMessage,
-          type: summary?.errors > 0 ? 'warning' : 'success',
-          title: 'Tạo hashtags thành công'
-        });
-        
-        // Show platform warning if exists
-        if (summary?.platformWarning) {
-          setTimeout(() => {
-            showToast?.({
-              message: summary.platformWarning,
-              type: 'warning',
-              title: 'Lưu ý về platform'
-            });
-          }, 1000);
-        }
-      }
-    } catch (error) {
-      console.error('Error generating hashtags:', error);
-      showToast?.({
-        message: 'Có lỗi xảy ra khi tạo hashtags AI',
-        type: 'error',
-        title: 'Lỗi tạo hashtags'
-      });
-    } finally {
-      console.log('🔄 AI Hashtags generation finished');
-      setAiLoading(prev => ({ ...prev, hashtags: false }));
-    }
-  };
+  // AI actions are handled centrally via AIQuickActions component
 
   const getPreviewDimensions = () => {
     const ratio = composeData.metadata?.ratio || '1:1';
@@ -368,25 +222,15 @@ export default function ComposeCenterPanel({
               <label className="block text-sm font-medium text-gray-700">
                 Nội dung chính
               </label>
-              <button
-                onClick={() => {
-                  console.log('🎯 AI Content button clicked, loading state:', aiLoading.content);
-                  handleGenerateContent();
+              <AIQuickActions
+                composeData={composeData}
+                onDataChange={onDataChange}
+                activeTab={activeTab}
+                onHashtagResult={(validation: unknown, recommendations: string[]) => {
+                  setHashtagValidation(validation);
+                  setHashtagRecommendations(recommendations);
                 }}
-                disabled={aiLoading.content}
-                className={`text-sm font-medium transition-colors flex items-center gap-1 ${
-                  aiLoading.content 
-                    ? 'text-gray-400 cursor-not-allowed' 
-                    : 'text-blue-600 hover:text-blue-700'
-                }`}
-              >
-                {aiLoading.content ? (
-                  <div className="animate-spin w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full"></div>
-                ) : (
-                  '🤖'
-                )}
-                {aiLoading.content ? 'Đang tạo...' : 'AI tạo nội dung'}
-              </button>
+              />
             </div>
             <ContentEditor
               value={composeData.content || ''}
@@ -402,25 +246,6 @@ export default function ComposeCenterPanel({
               <label className="block text-sm font-medium text-gray-700">
                 Hashtags
               </label>
-              <button
-                onClick={() => {
-                  console.log('🎯 AI Hashtags button clicked, loading state:', aiLoading.hashtags);
-                  handleGenerateHashtags();
-                }}
-                disabled={aiLoading.hashtags}
-                className={`text-sm font-medium transition-colors flex items-center gap-1 ${
-                  aiLoading.hashtags 
-                    ? 'text-gray-400 cursor-not-allowed' 
-                    : 'text-blue-600 hover:text-blue-700'
-                }`}
-              >
-                {aiLoading.hashtags ? (
-                  <div className="animate-spin w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full"></div>
-                ) : (
-                  '#️⃣'
-                )}
-                {aiLoading.hashtags ? 'Đang tạo...' : 'AI gợi ý hashtag'}
-              </button>
             </div>
             <input
               type="text"

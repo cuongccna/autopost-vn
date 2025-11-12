@@ -52,62 +52,51 @@ export default function ComposeRightPanel({
   getRateLimitMessage,
   showToast,
 }: ComposeRightPanelProps) {
-  // Debug logs
-  console.log('🔍 ComposeRightPanel - rateLimitData:', rateLimitData);
-  console.log('🔍 ComposeRightPanel - getRateLimitMessage:', getRateLimitMessage);
-  
   const [selectedChannels, setSelectedChannels] = useState<Set<string>>(
     () => new Set(composeData.channels || ['facebook', 'instagram'])
   );
 
-    const [scheduleAt, setScheduleAt] = useState(composeData.scheduleAt || '');
+  const [scheduleAt, setScheduleAt] = useState(composeData.scheduleAt || '');
 
-    useEffect(() => {
-      if (composeData.scheduleAt !== undefined && composeData.scheduleAt !== scheduleAt) {
-        setScheduleAt(composeData.scheduleAt);
-      }
-    }, [composeData.scheduleAt, scheduleAt]);
-
-    useEffect(() => {
-      if (!composeData.channels || composeData.channels.length === 0) {
-        return;
-      }
-
-      setSelectedChannels(prev => {
-        const isSame = composeData.channels &&
-          composeData.channels.length === prev.size &&
-          composeData.channels.every(channel => prev.has(channel));
-
-        if (isSame) {
-          return prev;
-        }
-
-        return new Set(composeData.channels);
-      });
-    }, [composeData.channels]);
-
-  // Update parent when channels change
   useEffect(() => {
-    onDataChange({
-      channels: Array.from(selectedChannels)
-    });
-  }, [selectedChannels, onDataChange]);
+    if (composeData.scheduleAt !== undefined && composeData.scheduleAt !== scheduleAt) {
+      setScheduleAt(composeData.scheduleAt);
+    }
+  }, [composeData.scheduleAt, scheduleAt]);
 
-  // Update parent when schedule changes
   useEffect(() => {
-    onDataChange({
-      scheduleAt
+    if (!composeData.channels || composeData.channels.length === 0) {
+      return;
+    }
+
+    setSelectedChannels(prev => {
+      const isSame = composeData.channels &&
+        composeData.channels.length === prev.size &&
+        composeData.channels.every(channel => prev.has(channel));
+
+      if (isSame) {
+        return prev;
+      }
+
+      return new Set(composeData.channels);
     });
-  }, [scheduleAt, onDataChange]);
+  }, [composeData.channels]);
 
   const toggleChannel = (channelKey: string) => {
-    const newChannels = new Set(selectedChannels);
-    if (newChannels.has(channelKey)) {
-      newChannels.delete(channelKey);
-    } else {
-      newChannels.add(channelKey);
-    }
-    setSelectedChannels(newChannels);
+    setSelectedChannels(prev => {
+      const next = new Set(prev);
+      if (next.has(channelKey)) {
+        next.delete(channelKey);
+      } else {
+        next.add(channelKey);
+      }
+
+      onDataChange({
+        channels: Array.from(next)
+      });
+
+      return next;
+    });
   };
 
   const providerExists = (platformKey: string): platformKey is keyof typeof PROVIDERS =>
@@ -173,6 +162,9 @@ export default function ComposeRightPanel({
     
     const formatted = now.toISOString().slice(0, 16);
     setScheduleAt(formatted);
+    onDataChange({
+      scheduleAt: formatted
+    });
   };
 
   const formatDateTime = (dateTimeString: string) => {
@@ -261,7 +253,12 @@ export default function ComposeRightPanel({
           <input
             type="datetime-local"
             value={scheduleAt}
-            onChange={(e) => setScheduleAt(e.target.value)}
+            onChange={(e) => {
+              setScheduleAt(e.target.value);
+              onDataChange({
+                scheduleAt: e.target.value
+              });
+            }}
             min={new Date().toISOString().slice(0, 16)}
             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
@@ -282,7 +279,10 @@ export default function ComposeRightPanel({
         {/* Post Now Option */}
         <div className="mt-4">
           <button
-            onClick={() => setScheduleAt('')}
+            onClick={() => {
+              setScheduleAt('');
+              onDataChange({ scheduleAt: '' });
+            }}
             className="w-full px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 border border-gray-300 rounded-md hover:bg-gray-200 transition-colors"
           >
             🚀 Đăng ngay lập tức
