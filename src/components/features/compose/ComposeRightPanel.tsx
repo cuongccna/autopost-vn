@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { PROVIDERS } from '@/lib/constants';
+import ContentPlanAssistant from '@/components/features/compose/ContentPlanAssistant';
+import type { AIContentPlanDay, AIContentPlanSlot } from '@/types/ai';
 
 interface ComposeData {
   title: string;
@@ -10,6 +12,7 @@ interface ComposeData {
   scheduleAt: string;
   mediaUrls: string[];
   postId?: string;
+  aiContext?: string;
   metadata?: {
     type?: 'social' | 'video';
     platform: string;
@@ -31,6 +34,7 @@ interface ComposeRightPanelProps {
   onDataChange: (data: Partial<ComposeData>) => void;
   rateLimitData?: any;
   getRateLimitMessage?: (data: any) => string;
+  showToast?: (options: { message: string; type: 'success' | 'error' | 'warning'; title?: string }) => void;
 }
 
 // Golden hours for optimal posting times
@@ -45,57 +49,56 @@ export default function ComposeRightPanel({
   composeData,
   onDataChange,
   rateLimitData,
-  getRateLimitMessage
+  getRateLimitMessage,
+  showToast,
 }: ComposeRightPanelProps) {
   // Debug logs
   console.log('🔍 ComposeRightPanel - rateLimitData:', rateLimitData);
   console.log('🔍 ComposeRightPanel - getRateLimitMessage:', getRateLimitMessage);
   
   const [selectedChannels, setSelectedChannels] = useState<Set<string>>(
-    new Set(composeData.channels || ['facebook', 'instagram'])
+    () => new Set(composeData.channels || ['facebook', 'instagram'])
   );
 
-  const [scheduleAt, setScheduleAt] = useState(composeData.scheduleAt || '');
+    const [scheduleAt, setScheduleAt] = useState(composeData.scheduleAt || '');
+
+    useEffect(() => {
+      if (composeData.scheduleAt !== undefined && composeData.scheduleAt !== scheduleAt) {
+        setScheduleAt(composeData.scheduleAt);
+      }
+    }, [composeData.scheduleAt, scheduleAt]);
+
+    useEffect(() => {
+      if (!composeData.channels || composeData.channels.length === 0) {
+        return;
+      }
+
+      setSelectedChannels(prev => {
+        const isSame = composeData.channels &&
+          composeData.channels.length === prev.size &&
+          composeData.channels.every(channel => prev.has(channel));
+
+        if (isSame) {
+          return prev;
+        }
+
+        return new Set(composeData.channels);
+      });
+    }, [composeData.channels]);
 
   // Update parent when channels change
   useEffect(() => {
     onDataChange({
-      ...composeData,
       channels: Array.from(selectedChannels)
     });
-  }, [selectedChannels]);
+  }, [selectedChannels, onDataChange]);
 
   // Update parent when schedule changes
   useEffect(() => {
     onDataChange({
-      ...composeData,
       scheduleAt
     });
-  }, [scheduleAt]);
-
-  const platforms = [
-    {
-      key: 'facebook',
-      name: 'Facebook Page',
-      icon: '📘',
-      status: selectedChannels.has('facebook'),
-      description: 'Đăng lên Facebook Page'
-    },
-    {
-      key: 'instagram', 
-      name: 'Instagram Biz',
-      icon: '📷',
-      status: selectedChannels.has('instagram'),
-      description: 'Đăng lên Instagram Biz'
-    },
-    {
-      key: 'zalo',
-      name: 'Zalo OA', 
-      icon: '💬',
-      status: selectedChannels.has('zalo'),
-      description: 'Đăng lên Zalo OA'
-    }
-  ];
+  }, [scheduleAt, onDataChange]);
 
   const toggleChannel = (channelKey: string) => {
     const newChannels = new Set(selectedChannels);
@@ -105,6 +108,55 @@ export default function ComposeRightPanel({
       newChannels.add(channelKey);
     }
     setSelectedChannels(newChannels);
+  };
+
+  const providerExists = (platformKey: string): platformKey is keyof typeof PROVIDERS =>
+    Object.prototype.hasOwnProperty.call(PROVIDERS, platformKey);
+
+  const applyPlanSlot = (day: AIContentPlanDay, slot: AIContentPlanSlot) => {
+    const normalizedPlatform = slot.platform.toLowerCase();
+    const normalizedTime = slot.time.length > 5 ? slot.time.slice(0, 5) : slot.time;
+    const scheduleValue = `${day.date}T${normalizedTime}`;
+
+    const updatedChannelSet = new Set(selectedChannels);
+    if (providerExists(normalizedPlatform)) {
+      updatedChannelSet.add(normalizedPlatform);
+    }
+
+    setScheduleAt(scheduleValue);
+    setSelectedChannels(updatedChannelSet);
+
+    const updates: Partial<ComposeData> = {
+      scheduleAt: scheduleValue,
+      channels: Array.from(updatedChannelSet),
+    };
+
+    if (slot.captionIdea) {
+      updates.content = slot.captionIdea;
+    }
+
+    if (slot.angle) {
+      updates.title = slot.angle;
+    }
+
+    if (slot.recommendedHashtags && slot.recommendedHashtags.length > 0) {
+      const platformLabel = providerExists(normalizedPlatform)
+        ? PROVIDERS[normalizedPlatform].label
+        : composeData.metadata?.platform || 'Facebook Page';
+
+      updates.metadata = {
+        ...(composeData.metadata || { platform: platformLabel, ratio: '1:1' }),
+        platform: platformLabel,
+        hashtags: slot.recommendedHashtags.join(' '),
+      };
+    }
+
+    onDataChange(updates);
+    showToast?.({
+      type: 'success',
+      message: `Đã áp dụng gợi ý ${slot.platform.toUpperCase()} lúc ${slot.time}.`,
+      title: 'AI Trợ lý',
+    });
   };
 
   const handleQuickTime = (hour: string) => {
@@ -164,7 +216,7 @@ export default function ComposeRightPanel({
                 </div>
               </div>
               <div className="text-2xl">
-                {key === 'facebook' ? '📘' : key === 'instagram' ? '📷' : '�'}
+                {key === 'facebook' ? '📘' : key === 'instagram' ? '📷' : '💬'}
               </div>
             </label>
           ))}
@@ -237,6 +289,12 @@ export default function ComposeRightPanel({
           </button>
         </div>
       </div>
+
+      <ContentPlanAssistant
+        composeData={composeData}
+        onApplySlot={applyPlanSlot}
+        showToast={showToast}
+      />
 
       {/* Rate Limit Status */}
       {rateLimitData && (

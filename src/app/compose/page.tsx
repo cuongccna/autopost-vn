@@ -21,6 +21,7 @@ interface ComposeData {
   mediaUrls: string[];
   mediaType?: 'image' | 'video' | 'album' | 'none';
   postId?: string;
+  aiContext?: string;
   metadata?: {
     type?: 'social' | 'video';
     platform: string;
@@ -50,6 +51,7 @@ export default function ComposePage() {
     channels: ['facebook', 'instagram'],
     scheduleAt: '',
     mediaUrls: [],
+    aiContext: '',
     metadata: {
       type: 'social',
       platform: 'Facebook Page',
@@ -61,6 +63,28 @@ export default function ComposePage() {
   });
   
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const handleComposeDataChange = (updates: Partial<ComposeData>) => {
+    setComposeData(prev => {
+      const next: Partial<ComposeData> = {
+        ...prev,
+        ...updates,
+      };
+
+      if (prev?.metadata || updates.metadata) {
+        const mergedMetadata = {
+          platform: updates.metadata?.platform ?? prev?.metadata?.platform ?? 'Facebook Page',
+          ratio: updates.metadata?.ratio ?? prev?.metadata?.ratio ?? '1:1',
+          ...(prev?.metadata || {}),
+          ...(updates.metadata || {}),
+        };
+
+        next.metadata = mergedMetadata;
+      }
+
+      return next;
+    });
+  };
+
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [submissionResult, setSubmissionResult] = useState<any>(null);
   const [editingPostId, setEditingPostId] = useState<string | null>(null);
@@ -449,7 +473,7 @@ export default function ComposePage() {
               activeTab={activeTab}
               onTabChange={setActiveTab}
               composeData={composeData}
-              onDataChange={setComposeData}
+              onDataChange={handleComposeDataChange}
             />
           </div>
 
@@ -458,7 +482,7 @@ export default function ComposePage() {
             <ComposeCenterPanel
               activeTab={activeTab}
               composeData={composeData}
-              onDataChange={setComposeData}
+              onDataChange={handleComposeDataChange}
               showToast={showToast}
             />
           </div>
@@ -467,9 +491,10 @@ export default function ComposePage() {
           <div className="lg:col-span-3">
             <ComposeRightPanel
               composeData={composeData}
-              onDataChange={setComposeData}
+              onDataChange={handleComposeDataChange}
               rateLimitData={rateLimitData}
               getRateLimitMessage={getRateLimitMessage}
+              showToast={showToast}
             />
           </div>
         </div>

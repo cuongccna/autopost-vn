@@ -15,7 +15,7 @@ export interface RateLimitResult {
   message?: string;
 }
 
-export type AIRequestType = 'caption' | 'hashtags' | 'script' | 'optimal_times';
+export type AIRequestType = 'caption' | 'hashtags' | 'script' | 'optimal_times' | 'content_plan';
 
 /**
  * Check if user can make AI request based on their role and current usage

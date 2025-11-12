@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { activityLogger } from '@/lib/services/activityLogger';
 import { useAIRateLimit } from '@/hooks/useAIRateLimit';
 import { useToast } from '@/components/ui/Toast';
-import type { AIContext } from '@/lib/services/gemini';
+import { buildAIContextFromComposeData } from '@/lib/utils/build-ai-context';
 
 interface ComposeData {
   title: string;
@@ -13,6 +13,7 @@ interface ComposeData {
   scheduleAt: string;
   mediaUrls: string[];
   postId?: string;
+  aiContext?: string;
   metadata?: {
     type?: 'social' | 'video';
     platform: string;
@@ -35,50 +36,6 @@ interface ComposeLeftPanelProps {
   composeData: Partial<ComposeData>;
   onDataChange: (data: Partial<ComposeData>) => void;
 }
-
-/**
- * Build rich AI context from available data
- */
-const buildAIContext = (composeData: Partial<ComposeData>): AIContext => {
-  const now = new Date();
-  const month = now.getMonth() + 1; // 0-11 -> 1-12
-  
-  // Determine seasonal context for Vietnam
-  let seasonalContext = '';
-  if (month === 1 || month === 2) {
-    seasonalContext = 'Tết Nguyên Đán, mùa xuân, năm mới';
-  } else if (month === 4 || month === 5) {
-    seasonalContext = 'Mùa hè, kỳ nghỉ lễ 30/4 - 1/5';
-  } else if (month === 9) {
-    seasonalContext = 'Mùa khai giảng, quốc khánh 2/9';
-  } else if (month === 12) {
-    seasonalContext = 'Giáng sinh, cuối năm, mua sắm tết';
-  } else if (month === 3) {
-    seasonalContext = 'Mùa xuân, 8/3 Quốc tế Phụ nữ';
-  } else if (month === 10) {
-    seasonalContext = 'Mùa thu, 20/10 Ngày Phụ nữ Việt Nam';
-  }
-  
-  const context: AIContext = {
-    // Extract from template/metadata if available
-    primaryGoal: composeData.metadata?.template?.includes('promo') || composeData.metadata?.template?.includes('sale') 
-      ? 'conversion' 
-      : composeData.metadata?.template?.includes('tips') || composeData.metadata?.template?.includes('tutorial')
-      ? 'education'
-      : 'engagement',
-    
-    // Seasonal context for Vietnam
-    seasonalContext,
-    
-    // Extract location (default to Vietnam)
-    location: 'Việt Nam',
-    
-    // Try to extract product type from content/title
-    productType: composeData.metadata?.type === 'video' ? 'Video content' : 'Social post',
-  };
-  
-  return context;
-};
 
 const templates = [
   {
@@ -264,7 +221,7 @@ export default function ComposeLeftPanel({
       const content = composeData.content || '';
       
       // Build rich AI context
-      const aiContext = buildAIContext(composeData);
+  const aiContext = buildAIContextFromComposeData(composeData);
 
       let endpoint = '';
       let requestBody: any = {};

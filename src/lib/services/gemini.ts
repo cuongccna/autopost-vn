@@ -20,12 +20,29 @@ export interface AIContext {
   businessType?: string;
   brandVoice?: string;
   primaryGoal?: 'awareness' | 'engagement' | 'conversion' | 'education';
+  campaignName?: string;
+  brandPillars?: string[];
+  keyMessages?: string[];
+  targetMetrics?: string[];
   
   // Audience context
   targetAge?: string;
   targetInterests?: string[];
   targetAudience?: string;
   location?: string;
+  audienceInsights?: string[];
+  
+  // Scheduling context
+  scheduleStartDate?: string;
+  scheduleEndDate?: string;
+  preferredPostingTimes?: string[];
+  preferredPostingTimezone?: string;
+  frequencyPerWeek?: number;
+  channels?: string[];
+  requiredDates?: string[];
+  preferredDays?: string[];
+  contentPacing?: string;
+  cadenceNotes?: string;
   
   // Content context
   previousPosts?: Array<{
@@ -33,9 +50,12 @@ export interface AIContext {
     engagement: number;
     platform: string;
   }>;
+  existingContentSummary?: string[];
   currentTrends?: string[];
   seasonalContext?: string;
   competitorInsights?: string;
+  highPriorityThemes?: string[];
+  lowPriorityThemes?: string[];
   
   // Product/Service context
   productType?: string;
@@ -43,9 +63,16 @@ export interface AIContext {
   benefits?: string[];
   price?: string;
   promotion?: string;
+  complianceNotes?: string;
+  budgetNotes?: string;
+  competitorToAvoid?: string[];
+  avoidTopics?: string[];
+
+  // Manual inputs
+  manualNotes?: string;
 }
 
-const defaultConfig: GeminiConfig = {
+export const defaultConfig: GeminiConfig = {
   temperature: 0.7,
   topP: 0.8,
   topK: 40,
@@ -186,6 +213,25 @@ export async function generateCaption(params: {
   if (aiContext.competitorInsights) {
     contextSection += `\n\n**Phân tích đối thủ:** ${aiContext.competitorInsights}`;
   }
+
+  if (
+    aiContext.channels?.length ||
+    aiContext.preferredPostingTimes?.length ||
+    aiContext.preferredPostingTimezone ||
+    aiContext.manualNotes ||
+    aiContext.targetMetrics?.length ||
+    aiContext.campaignName ||
+    aiContext.cadenceNotes
+  ) {
+    contextSection += `\n\n**Yêu cầu đăng bài & chiến dịch:**`;
+    if (aiContext.campaignName) contextSection += `\n- Chiến dịch: ${aiContext.campaignName}`;
+    if (aiContext.channels?.length) contextSection += `\n- Kênh đăng: ${aiContext.channels.join(', ')}`;
+    if (aiContext.preferredPostingTimes?.length) contextSection += `\n- Khung giờ ưu tiên: ${aiContext.preferredPostingTimes.join(', ')}`;
+    if (aiContext.preferredPostingTimezone) contextSection += `\n- Múi giờ: ${aiContext.preferredPostingTimezone}`;
+    if (aiContext.targetMetrics?.length) contextSection += `\n- Mục tiêu đo lường: ${aiContext.targetMetrics.join(', ')}`;
+    if (aiContext.cadenceNotes) contextSection += `\n- Ghi chú tần suất: ${aiContext.cadenceNotes}`;
+    if (aiContext.manualNotes) contextSection += `\n- Ghi chú thêm: ${aiContext.manualNotes}`;
+  }
   
   const prompt = `
 Tạo caption cho bài đăng ${platform.toUpperCase()} với thông tin sau:
@@ -282,6 +328,15 @@ export async function generateHashtags(params: {
   if (aiContext.currentTrends?.length) {
     contextSection += `\n- Xu hướng: ${aiContext.currentTrends.join(', ')}`;
   }
+  if (aiContext.campaignName) {
+    contextSection += `\n- Chiến dịch: ${aiContext.campaignName}`;
+  }
+  if (aiContext.channels?.length) {
+    contextSection += `\n- Kênh đăng dự kiến: ${aiContext.channels.join(', ')}`;
+  }
+  if (aiContext.manualNotes) {
+    contextSection += `\n- Ghi chú chiến dịch: ${aiContext.manualNotes}`;
+  }
 
   const prompt = `
 Tạo ${count} hashtags phù hợp cho bài đăng ${platform.toUpperCase()} với thông tin:
@@ -329,6 +384,33 @@ Ví dụ:
   } catch (error) {
     console.error('Gemini hashtags generation error:', error);
     throw new Error('Không thể tạo hashtags. Vui lòng thử lại.');
+  }
+}
+
+export async function generateContentPlanPrompt(
+  prompt: string,
+  config: GeminiConfig = {}
+): Promise<string> {
+  try {
+    const mergedConfig: GeminiConfig = {
+      ...defaultConfig,
+      ...config,
+      temperature: config.temperature ?? 0.65,
+      maxOutputTokens: config.maxOutputTokens ?? 2048,
+    };
+
+    const result = await retryWithBackoff(async () => {
+      return await model.generateContent({
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        generationConfig: mergedConfig,
+      });
+    }, 3, 2000);
+
+    const response = await result.response;
+    return response.text();
+  } catch (error) {
+    console.error('Gemini content plan generation error:', error);
+    throw new Error('Không thể tạo kế hoạch nội dung. Vui lòng thử lại.');
   }
 }
 

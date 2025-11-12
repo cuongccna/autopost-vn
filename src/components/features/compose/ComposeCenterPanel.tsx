@@ -6,6 +6,7 @@ import MediaLibraryPicker from '@/components/features/media/MediaLibraryPicker';
 import ContentEditor from '@/components/ui/ContentEditor';
 import HashtagItem from '@/components/ui/HashtagItem';
 import { FileText, FolderOpen, Info } from 'lucide-react';
+import { buildAIContextFromComposeData } from '@/lib/utils/build-ai-context';
 
 interface ComposeData {
   title: string;
@@ -174,9 +175,9 @@ export default function ComposeCenterPanel({
           platform: (composeData.metadata?.platform || 'Facebook Page').toLowerCase().replace(' page', ''),
           title: composeData.title || '',
           content: composeData.content || '',
-          context: composeData.aiContext || '', // Add AI context
           tone: 'exciting',
-          targetAudience: 'general'
+          targetAudience: 'general',
+          aiContext: buildAIContextFromComposeData(composeData),
         }),
       });
 
