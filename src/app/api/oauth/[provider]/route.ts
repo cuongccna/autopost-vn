@@ -78,12 +78,17 @@ function handleConnectRedirect(provider: string, userEmail: string) {
   })).toString('base64');
 
   const params = new URLSearchParams({
-    client_id: getClientId(provider),
     redirect_uri: getRedirectUri(provider),
     scope: config.scope,
     response_type: config.responseType,
     state,
   });
+
+  if (provider === 'zalo') {
+    params.set('app_id', getClientId(provider));
+  } else {
+    params.set('client_id', getClientId(provider));
+  }
 
   const authUrl = `${config.authUrl}?${params.toString()}`;
 
@@ -237,12 +242,16 @@ async function exchangeCodeForToken(provider: string, code: string) {
     zalo: 'https://oauth.zaloapp.com/v4/oa/access_token',
   };
 
-  const params = new URLSearchParams({
-    client_id: getClientId(provider),
-    client_secret: getClientSecret(provider),
-    code,
-    redirect_uri: getRedirectUri(provider),
-  });
+  const params = new URLSearchParams({ code, redirect_uri: getRedirectUri(provider) });
+
+  if (provider === 'zalo') {
+    params.set('app_id', getClientId(provider));
+    params.set('app_secret', getClientSecret(provider));
+    params.set('grant_type', 'authorization_code');
+  } else {
+    params.set('client_id', getClientId(provider));
+    params.set('client_secret', getClientSecret(provider));
+  }
 
   const response = await fetch(tokenUrls[provider as keyof typeof tokenUrls], {
     method: 'POST',

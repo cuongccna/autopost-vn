@@ -110,3 +110,4 @@ coverage/
 # Sentry Config File
 .env.sentry-build-plugin
 .cursor/mcp.json
+database/autopostvn.pub
