@@ -5,20 +5,44 @@
 
 import { Pool, PoolClient, PoolConfig, QueryResult, QueryResultRow } from 'pg';
 
-// Pool configuration
-const poolConfig: PoolConfig = {
-  host: process.env.POSTGRES_HOST || 'localhost',
-  port: parseInt(process.env.POSTGRES_PORT || '5432'),
-  database: process.env.POSTGRES_DATABASE || 'autopost_vn',
-  user: process.env.POSTGRES_USER || 'autopost_admin',
-  password: process.env.POSTGRES_PASSWORD || '',
-  max: 20, // Maximum number of clients in pool
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 2000,
-  ssl: process.env.NODE_ENV === 'production' && process.env.POSTGRES_SSL === 'true' ? {
-    rejectUnauthorized: false
-  } : false
+// Determine connection strategy (explicit config vs connection string)
+const connectionString = process.env.DATABASE_URL;
+const isProduction = process.env.NODE_ENV === 'production';
+const maxConnections = parseInt(process.env.DATABASE_MAX_CONNECTIONS || '20');
+const idleTimeout = parseInt(process.env.DATABASE_IDLE_TIMEOUT || '30000');
+const connectionTimeout = parseInt(process.env.DATABASE_CONNECTION_TIMEOUT || '2000');
+
+const baseConfig: Partial<PoolConfig> = {
+  max: maxConnections,
+  idleTimeoutMillis: idleTimeout,
+  connectionTimeoutMillis: connectionTimeout
 };
+
+const poolConfig: PoolConfig = connectionString
+  ? {
+      connectionString,
+      ...baseConfig
+    }
+  : {
+      host: process.env.POSTGRES_HOST || 'localhost',
+      port: parseInt(process.env.POSTGRES_PORT || '5432'),
+      database: process.env.POSTGRES_DATABASE || 'autopost_vn',
+      user: process.env.POSTGRES_USER || 'autopost_admin',
+      password: process.env.POSTGRES_PASSWORD || '',
+      ...baseConfig
+    };
+
+// Enable SSL in production when explicitly requested or when required by connection string
+const shouldEnableSSL = isProduction && (
+  process.env.POSTGRES_SSL === 'true' ||
+  (connectionString ? /sslmode=require/i.test(connectionString) : false)
+);
+
+if (shouldEnableSSL) {
+  poolConfig.ssl = { rejectUnauthorized: false };
+} else if (typeof poolConfig.ssl === 'undefined') {
+  poolConfig.ssl = false;
+}
 
 // Singleton pool instance
 let pool: Pool | null = null;
