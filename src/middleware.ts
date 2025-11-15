@@ -55,12 +55,34 @@ export async function middleware(req: NextRequest) {
   // For protected routes, check authentication
   console.log('🛡️ MIDDLEWARE: Protected route, checking token...')
   
-  const token = await getToken({ 
+  // Debug: Check cookies
+  const cookies = req.cookies.getAll()
+  console.log('🍪 MIDDLEWARE: All cookies:', cookies.map(c => c.name))
+  const sessionCookie = req.cookies.get('next-auth.session-token') || req.cookies.get('__Secure-next-auth.session-token')
+  console.log('🍪 MIDDLEWARE: Session cookie exists:', !!sessionCookie, 'name:', sessionCookie?.name, 'value length:', sessionCookie?.value?.length)
+  
+  // Try both secure and non-secure cookie names
+  let token = await getToken({ 
     req,
-    secret: process.env.NEXTAUTH_SECRET 
+    secret: process.env.NEXTAUTH_SECRET,
+    secureCookie: false,  // Try non-secure first since cookie name is 'next-auth.session-token'
+    cookieName: 'next-auth.session-token'
   })
   
-  console.log('🛡️ MIDDLEWARE: Token received:', !!token, 'token.id:', token?.id)
+  console.log('🛡️ MIDDLEWARE: Token (non-secure):', !!token, 'token.id:', token?.id)
+  
+  if (!token) {
+    // Try secure version
+    token = await getToken({ 
+      req,
+      secret: process.env.NEXTAUTH_SECRET,
+      secureCookie: true,
+      cookieName: '__Secure-next-auth.session-token'
+    })
+    console.log('🛡️ MIDDLEWARE: Token (secure):', !!token, 'token.id:', token?.id)
+  }
+  
+  console.log('🔑 MIDDLEWARE: NEXTAUTH_SECRET exists:', !!process.env.NEXTAUTH_SECRET, 'length:', process.env.NEXTAUTH_SECRET?.length)
   
   if (!token || !token.id) {
     console.log('🛡️ MIDDLEWARE: No valid token, redirecting to signin')
