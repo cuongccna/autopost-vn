@@ -110,15 +110,27 @@ export const authOptions: NextAuthOptions = {
   },
   callbacks: {
     async redirect({ url, baseUrl }) {
+      console.log('🔄 REDIRECT callback - url:', url, 'baseUrl:', baseUrl)
       // Allow relative callback URLs
-      if (url.startsWith("/")) return `${baseUrl}${url}`
+      if (url.startsWith("/")) {
+        const redirectUrl = `${baseUrl}${url}`
+        console.log('🔄 REDIRECT: Relative URL ->', redirectUrl)
+        return redirectUrl
+      }
       // Allow callback URLs on the same origin
-      if (new URL(url).origin === baseUrl) return url
+      if (new URL(url).origin === baseUrl) {
+        console.log('🔄 REDIRECT: Same origin ->', url)
+        return url
+      }
       // Default redirect to app after successful auth
-      return `${baseUrl}/app`
+      const defaultUrl = `${baseUrl}/app`
+      console.log('🔄 REDIRECT: Default ->', defaultUrl)
+      return defaultUrl
     },
     async jwt({ token, user }) {
+      console.log('🎫 JWT callback - user:', user ? 'present' : 'null', 'token.id:', token.id)
       if (user) {
+        console.log('🎫 JWT: Setting token.id =', user.id)
         token.id = user.id
         // Get user's role from user record, not workspace
         try {
@@ -129,20 +141,25 @@ export const authOptions: NextAuthOptions = {
           
           if (result.rows.length > 0) {
             token.user_role = result.rows[0].user_role || 'free'
+            console.log('🎫 JWT: Set user_role =', token.user_role)
           } else {
             token.user_role = 'free'
+            console.log('🎫 JWT: No role found, defaulting to free')
           }
         } catch (error) {
-          console.error('Error fetching user role:', error)
+          console.error('❌ JWT: Error fetching user role:', error)
           token.user_role = 'free'
         }
       }
+      console.log('🎫 JWT: Returning token with id:', token.id)
       return token
     },
     async session({ session, token }) {
+      console.log('📝 SESSION callback - token.id:', token.id, 'token.user_role:', token.user_role)
       if (token && session.user) {
         (session.user as any).id = token.id as string;
         (session.user as any).user_role = token.user_role as string;
+        console.log('📝 SESSION: Set user.id =', token.id, 'user_role =', token.user_role)
       }
       return session
     }
