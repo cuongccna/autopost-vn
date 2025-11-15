@@ -105,15 +105,26 @@ async function handleOAuthCallback(
   const error = searchParams.get('error');
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
 
+  // Debug logging
+  console.log('🔍 OAuth Callback Debug:', {
+    provider,
+    hasCode: !!code,
+    hasState: !!state,
+    error,
+    allParams: Object.fromEntries(searchParams.entries())
+  });
+
   if (error) {
+    console.error('❌ OAuth Error from provider:', error);
     return NextResponse.redirect(
       `${baseUrl}/app?oauth_error=${encodeURIComponent(error)}`
     );
   }
 
   if (!code || !state) {
+    console.error('❌ Missing parameters - code:', !!code, 'state:', !!state);
     return NextResponse.redirect(
-      `${baseUrl}/app?oauth_error=missing_parameters`
+      `${baseUrl}/app?oauth_error=missing_parameters&provider=${provider}`
     );
   }
 
