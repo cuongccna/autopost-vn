@@ -5,6 +5,10 @@ import { localStorageService } from '@/lib/services/localStorageService';
 import { insert } from '@/lib/db/postgres';
 import { v4 as uuidv4 } from 'uuid';
 
+// Disable body parser for file uploads
+export const runtime = 'nodejs';
+export const maxDuration = 60; // 60 seconds timeout for large file uploads
+
 // Maximum file sizes
 const MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10MB
 const MAX_VIDEO_SIZE = 100 * 1024 * 1024; // 100MB
@@ -14,18 +18,30 @@ const ALLOWED_VIDEO_TYPES = ['video/mp4', 'video/quicktime', 'video/x-msvideo'];
 
 export async function POST(request: NextRequest) {
   try {
+    console.log('📤 Media upload request received');
+    
     const session = await getServerSession(authOptions);
     if (!session?.user) {
+      console.error('❌ Unauthorized upload attempt');
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const userId = (session.user as any).id;
+    console.log('👤 User ID:', userId);
+    
     const formData = await request.formData();
     const file = formData.get('file') as File;
     
     if (!file) {
+      console.error('❌ No file in request');
       return NextResponse.json({ error: 'No file provided' }, { status: 400 });
     }
+
+    console.log('📁 File received:', {
+      name: file.name,
+      type: file.type,
+      size: file.size
+    });
 
     // Validate file type
     const isImage = ALLOWED_IMAGE_TYPES.includes(file.type);
