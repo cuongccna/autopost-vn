@@ -18,36 +18,46 @@ const ALLOWED_VIDEO_TYPES = ['video/mp4', 'video/quicktime', 'video/x-msvideo'];
 
 export async function POST(request: NextRequest) {
   try {
-    console.log('📤 Media upload request received');
+    console.log('📤 [MEDIA UPLOAD] Request received');
     
     const session = await getServerSession(authOptions);
     if (!session?.user) {
-      console.error('❌ Unauthorized upload attempt');
+      console.error('❌ [MEDIA UPLOAD] Unauthorized upload attempt');
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const userId = (session.user as any).id;
-    console.log('👤 User ID:', userId);
+    console.log('👤 [MEDIA UPLOAD] User ID:', userId);
     
     const formData = await request.formData();
     const file = formData.get('file') as File;
     
     if (!file) {
-      console.error('❌ No file in request');
+      console.error('❌ [MEDIA UPLOAD] No file in request');
       return NextResponse.json({ error: 'No file provided' }, { status: 400 });
     }
 
-    console.log('📁 File received:', {
+    console.log('📁 [MEDIA UPLOAD] File received:', {
       name: file.name,
       type: file.type,
-      size: file.size
+      size: file.size,
+      sizeInMB: (file.size / 1024 / 1024).toFixed(2) + 'MB'
     });
 
     // Validate file type
     const isImage = ALLOWED_IMAGE_TYPES.includes(file.type);
     const isVideo = ALLOWED_VIDEO_TYPES.includes(file.type);
 
+    console.log('🔍 [MEDIA UPLOAD] File type validation:', { 
+      isImage, 
+      isVideo, 
+      fileType: file.type,
+      allowedImages: ALLOWED_IMAGE_TYPES,
+      allowedVideos: ALLOWED_VIDEO_TYPES
+    });
+
     if (!isImage && !isVideo) {
+      console.error('❌ [MEDIA UPLOAD] Invalid file type:', file.type);
       return NextResponse.json(
         { error: 'Invalid file type. Allowed: images (jpg, png, gif, webp) and videos (mp4, mov, avi)' },
         { status: 400 }
@@ -56,7 +66,19 @@ export async function POST(request: NextRequest) {
 
     // Validate file size
     const maxSize = isImage ? MAX_IMAGE_SIZE : MAX_VIDEO_SIZE;
+    console.log('📏 [MEDIA UPLOAD] Size check:', {
+      fileSize: file.size,
+      maxSize,
+      type: isImage ? 'image' : 'video',
+      sizeOK: file.size <= maxSize
+    });
+    
     if (file.size > maxSize) {
+      console.error('❌ [MEDIA UPLOAD] File too large:', {
+        fileSize: file.size,
+        maxSize,
+        maxSizeMB: (maxSize / 1024 / 1024) + 'MB'
+      });
       return NextResponse.json(
         { 
           error: `File too large. Maximum size: ${isImage ? '10MB' : '100MB'}`,
@@ -73,16 +95,23 @@ export async function POST(request: NextRequest) {
     const extension = file.name.split('.').pop();
     const fileName = `${userId}/${timestamp}-${randomStr}.${extension}`;
 
+    console.log('🏷️ [MEDIA UPLOAD] Generated filename:', fileName);
+
     // Convert File to Buffer
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
+    console.log('💾 [MEDIA UPLOAD] File converted to buffer, size:', buffer.length);
+
     // Get workspace_id from session if available
     const workspaceId = (session.user as any).workspace_id || null;
+
+    console.log('🏢 [MEDIA UPLOAD] Workspace ID:', workspaceId);
 
     // Upload to local storage
     let uploadResult;
     try {
+      console.log('☁️ [MEDIA UPLOAD] Starting upload to local storage...');
       uploadResult = await localStorageService.uploadFile(
         buffer,
         file.name,
@@ -92,8 +121,13 @@ export async function POST(request: NextRequest) {
           workspaceId: workspaceId || undefined
         }
       );
+      console.log('✅ [MEDIA UPLOAD] Local storage upload successful:', {
+        url: uploadResult.url,
+        path: uploadResult.path,
+        size: uploadResult.size
+      });
     } catch (uploadError) {
-      console.error('Local storage upload error:', uploadError);
+      console.error('❌ [MEDIA UPLOAD] Local storage upload error:', uploadError);
       return NextResponse.json(
         { error: 'Upload failed: ' + (uploadError instanceof Error ? uploadError.message : 'Unknown error') },
         { status: 500 }
@@ -105,6 +139,7 @@ export async function POST(request: NextRequest) {
     // Save to autopostvn_media table
     let mediaRecord;
     try {
+      console.log('💾 [MEDIA UPLOAD] Saving to database...');
       const mediaRecords = await insert('autopostvn_media', {
         user_id: userId,
         workspace_id: workspaceId,
@@ -123,10 +158,22 @@ export async function POST(request: NextRequest) {
         },
       });
       mediaRecord = mediaRecords[0];
+      console.log('✅ [MEDIA UPLOAD] Database record created:', {
+        id: mediaRecord?.id,
+        media_type: isImage ? 'image' : 'video',
+        file_name: file.name
+      });
     } catch (dbError) {
-      console.error('Failed to save media record:', dbError);
+      console.error('❌ [MEDIA UPLOAD] Failed to save media record:', dbError);
       // Don't fail the upload, just log the error
     }
+
+    console.log('🎉 [MEDIA UPLOAD] Upload completed successfully:', {
+      fileName: file.name,
+      mediaType: isImage ? 'image' : 'video',
+      size: file.size,
+      url: publicUrl
+    });
 
     return NextResponse.json({
       success: true,
@@ -136,13 +183,14 @@ export async function POST(request: NextRequest) {
         type: file.type,
         size: file.size,
         url: publicUrl,
-        path: fileName,
+        path: uploadResult.path, // Use the actual path from uploadResult
+        bucket: 'local', // Add bucket identifier for compatibility
         mediaType: isImage ? 'image' : 'video',
       },
     });
 
   } catch (error) {
-    console.error('Media upload error:', error);
+    console.error('❌ [MEDIA UPLOAD] Unexpected error:', error);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

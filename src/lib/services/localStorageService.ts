@@ -45,6 +45,14 @@ export class LocalStorageService {
       workspaceId?: string;
     } = {}
   ): Promise<UploadedFile> {
+    console.log('📤 [LOCAL STORAGE] Upload started:', {
+      originalName,
+      contentType,
+      fileSize: file.length,
+      userId: options.userId,
+      workspaceId: options.workspaceId
+    });
+
     await this.ensureUploadDir();
 
     // Tạo tên file unique
@@ -59,20 +67,33 @@ export class LocalStorageService {
       subDir = 'videos';
     }
 
+    console.log('📁 [LOCAL STORAGE] Determined subdirectory:', subDir);
+
     // Thêm userId vào path nếu có
     if (options.userId) {
       subDir = path.join(subDir, options.userId);
       await fs.mkdir(path.join(this.uploadDir, subDir), { recursive: true });
+      console.log('📂 [LOCAL STORAGE] Created user subdirectory:', subDir);
     }
 
     const filePath = path.join(this.uploadDir, subDir, fileName);
     const relativePath = path.join('uploads', subDir, fileName).replace(/\\/g, '/');
 
+    console.log('💾 [LOCAL STORAGE] Writing file to disk:', {
+      filePath,
+      relativePath,
+      size: file.length
+    });
+
     // Lưu file
     await fs.writeFile(filePath, file);
 
+    console.log('✅ [LOCAL STORAGE] File written successfully');
+
     // Tạo URL public
     const url = `${this.baseUrl}/${relativePath}`;
+
+    console.log('🔗 [LOCAL STORAGE] Generated public URL:', url);
 
     return {
       url,
