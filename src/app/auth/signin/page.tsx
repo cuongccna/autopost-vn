@@ -19,20 +19,25 @@ export default function SignIn() {
     setError('')
 
     try {
+      console.log('🔐 SIGNIN: Attempting login for', email)
       const result = await signIn('credentials', {
         email,
         password,
-        redirect: false
+        callbackUrl: '/app',
+        redirect: true  // Let NextAuth handle redirect
       })
 
+      console.log('🔐 SIGNIN: Result:', result)
+      
+      // This code won't run if redirect: true
       if (result?.error) {
+        console.error('🔐 SIGNIN: Error -', result.error)
         setError('Email hoặc mật khẩu không đúng')
-      } else {
-        router.push('/app' as any)
+        setLoading(false)
       }
     } catch (error) {
+      console.error('🔐 SIGNIN: Exception -', error)
       setError('Có lỗi xảy ra, vui lòng thử lại')
-    } finally {
       setLoading(false)
     }
   }

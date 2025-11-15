@@ -128,31 +128,36 @@ export const authOptions: NextAuthOptions = {
       return defaultUrl
     },
     async jwt({ token, user }) {
-      console.log('🎫 JWT callback - user:', user ? 'present' : 'null', 'token.id:', token.id)
-      if (user) {
-        console.log('🎫 JWT: Setting token.id =', user.id)
-        token.id = user.id
-        // Get user's role from user record, not workspace
-        try {
-          const result = await query(
-            'SELECT user_role FROM autopostvn_users WHERE id = $1 LIMIT 1',
-            [user.id]
-          )
-          
-          if (result.rows.length > 0) {
-            token.user_role = result.rows[0].user_role || 'free'
-            console.log('🎫 JWT: Set user_role =', token.user_role)
-          } else {
+      try {
+        console.log('🎫 JWT callback - user:', user ? 'present' : 'null', 'token.id:', token.id)
+        if (user) {
+          console.log('🎫 JWT: Setting token.id =', user.id)
+          token.id = user.id
+          // Get user's role from user record, not workspace
+          try {
+            const result = await query(
+              'SELECT user_role FROM autopostvn_users WHERE id = $1 LIMIT 1',
+              [user.id]
+            )
+            
+            if (result.rows.length > 0) {
+              token.user_role = result.rows[0].user_role || 'free'
+              console.log('🎫 JWT: Set user_role =', token.user_role)
+            } else {
+              token.user_role = 'free'
+              console.log('🎫 JWT: No role found, defaulting to free')
+            }
+          } catch (error) {
+            console.error('❌ JWT: Error fetching user role:', error)
             token.user_role = 'free'
-            console.log('🎫 JWT: No role found, defaulting to free')
           }
-        } catch (error) {
-          console.error('❌ JWT: Error fetching user role:', error)
-          token.user_role = 'free'
         }
+        console.log('🎫 JWT: Returning token with id:', token.id)
+        return token
+      } catch (error) {
+        console.error('❌ JWT CALLBACK ERROR:', error)
+        throw error
       }
-      console.log('🎫 JWT: Returning token with id:', token.id)
-      return token
     },
     async session({ session, token }) {
       console.log('📝 SESSION callback - token.id:', token.id, 'token.user_role:', token.user_role)
