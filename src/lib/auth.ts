@@ -13,10 +13,13 @@ export const authOptions: NextAuthOptions = {
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) {
+          console.log('❌ AUTH: Missing credentials')
           return null
         }
 
         try {
+          console.log('🔍 AUTH: Login attempt for:', credentials.email)
+          
           // Find user by email in users table
           const result = await query(
             `SELECT * FROM autopostvn_users WHERE email = $1 LIMIT 1`,
@@ -24,23 +27,31 @@ export const authOptions: NextAuthOptions = {
           )
 
           if (result.rows.length === 0) {
-            console.log('User not found:', credentials.email)
+            console.log('❌ AUTH: User not found:', credentials.email)
             return null
           }
 
           const user = result.rows[0]
+          console.log('✅ AUTH: User found - ID:', user.id, 'Email:', user.email)
           
           // Verify password
           if (!user.password_hash) {
-            console.log('No password hash found')
+            console.log('❌ AUTH: No password hash found for user:', user.id)
             return null
           }
 
+          console.log('🔐 AUTH: Password hash exists, length:', user.password_hash.length)
+          console.log('🔐 AUTH: Comparing password...')
+          
           const passwordValid = await bcrypt.compare(credentials.password, user.password_hash)
+          console.log('🔐 AUTH: Password comparison result:', passwordValid)
+          
           if (!passwordValid) {
-            console.log('Invalid password')
+            console.log('❌ AUTH: Invalid password for user:', user.email)
             return null
           }
+          
+          console.log('✅ AUTH: Password verified successfully!')
 
           // Auto-create workspace if not exists (1:1 mapping with user)
           const workspaceResult = await query(
