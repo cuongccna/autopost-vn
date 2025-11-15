@@ -238,12 +238,8 @@ function getClientId(provider: string): string {
 function getRedirectUri(provider: string): string {
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
 
-  // Zalo requires a simpler callback URL structure
-  if (provider === 'zalo') {
-    return `${baseUrl}/api/oauth/zalo/callback`;
-  }
-
-  return `${baseUrl}/api/oauth/${provider}?action=callback`;
+  // Use dedicated callback routes for each provider
+  return `${baseUrl}/api/oauth/${provider}/callback`;
 }
 
 async function exchangeCodeForToken(provider: string, code: string) {
