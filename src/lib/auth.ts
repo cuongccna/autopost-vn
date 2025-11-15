@@ -73,14 +73,17 @@ export const authOptions: NextAuthOptions = {
             )
           }
 
-          return {
+          const userObject = {
             id: user.id,
             email: user.email,
             name: user.full_name || user.email,
             image: user.avatar_url || ''
           }
+          
+          console.log('✅ AUTH: Returning user object:', JSON.stringify(userObject))
+          return userObject
         } catch (error) {
-          console.error('Auth error:', error)
+          console.error('❌ AUTH ERROR:', error)
           return null
         }
       }
