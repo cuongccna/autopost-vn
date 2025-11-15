@@ -76,28 +76,78 @@ export async function GET(request: NextRequest) {
     const userData = await userResponse.json();
     console.log('✅ User info received:', userData.name);
 
-    // Save Instagram account
-    await userManagementService.saveOAuthAccount(
-      session.user.email,
-      'instagram',
-      {
-        access_token: tokenData.access_token,
-        refresh_token: tokenData.refresh_token,
-        expires_in: tokenData.expires_in,
-        account_info: {
-          providerId: userData.id,
-          name: userData.name || 'Instagram User',
-          email: userData.email,
-          category: 'user',
-          tokenType: 'user_token'
-        },
-      }
+    let savedAccountsCount = 0;
+    let accountNames: string[] = [];
+
+    // Get Facebook Pages (which may have linked Instagram accounts)
+    console.log('📄 Fetching Facebook Pages for Instagram Business accounts...');
+    const pagesResponse = await fetch(
+      `https://graph.facebook.com/v18.0/me/accounts?fields=id,name,instagram_business_account&access_token=${tokenData.access_token}`
     );
 
-    console.log('✅ Instagram account saved');
+    if (pagesResponse.ok) {
+      const pagesData = await pagesResponse.json();
+      console.log('📊 Number of pages found:', pagesData.data?.length || 0);
+
+      if (pagesData.data && pagesData.data.length > 0) {
+        for (const page of pagesData.data) {
+          // Check if this page has a linked Instagram Business account
+          if (page.instagram_business_account) {
+            try {
+              const igAccountId = page.instagram_business_account.id;
+              
+              // Get Instagram account details
+              const igResponse = await fetch(
+                `https://graph.facebook.com/v18.0/${igAccountId}?fields=id,username,name,profile_picture_url&access_token=${tokenData.access_token}`
+              );
+
+              if (igResponse.ok) {
+                const igData = await igResponse.json();
+                console.log(`📝 Saving Instagram account: ${igData.username}`);
+
+                await userManagementService.saveOAuthAccount(
+                  session.user.email,
+                  'instagram',
+                  {
+                    access_token: tokenData.access_token,
+                    refresh_token: tokenData.refresh_token,
+                    expires_in: tokenData.expires_in,
+                    account_info: {
+                      providerId: igData.id,
+                      name: igData.name || igData.username,
+                      username: igData.username,
+                      profile_picture_url: igData.profile_picture_url,
+                      category: 'business',
+                      linked_page_id: page.id,
+                      linked_page_name: page.name,
+                      tokenType: 'page_token'
+                    }
+                  }
+                );
+
+                savedAccountsCount++;
+                accountNames.push(`@${igData.username}`);
+                console.log(`✅ Saved Instagram account: @${igData.username}`);
+              }
+            } catch (igError) {
+              console.error(`❌ Error saving Instagram account for page ${page.id}:`, igError);
+            }
+          }
+        }
+      }
+    }
+
+    if (savedAccountsCount === 0) {
+      console.log('⚠️  No Instagram Business accounts found linked to Facebook Pages');
+      return NextResponse.redirect(
+        `${baseUrl}/app?oauth_error=no_instagram_accounts&message=${encodeURIComponent('Không tìm thấy tài khoản Instagram Business nào được liên kết với Facebook Pages. Vui lòng chuyển Instagram sang Business account và liên kết với Facebook Page.')}`
+      );
+    }
+
+    console.log(`✅ Total Instagram accounts saved: ${savedAccountsCount}`);
 
     return NextResponse.redirect(
-      `${baseUrl}/app?oauth_success=instagram&accounts_saved=1&account=${encodeURIComponent(userData.name || 'Instagram User')}`
+      `${baseUrl}/app?oauth_success=instagram&accounts_saved=${savedAccountsCount}&account=${encodeURIComponent(accountNames.join(', '))}`
     );
   } catch (error) {
     console.error('❌ Instagram OAuth callback error:', error);
