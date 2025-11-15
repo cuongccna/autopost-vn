@@ -17,8 +17,8 @@ const OAUTH_CONFIGS = {
   instagram: {
     authUrl: 'https://www.facebook.com/v18.0/dialog/oauth',
     // ✅ Instagram Business via Facebook Pages API
-    // Need pages_show_list to get pages, and instagram_basic to get IG accounts
-    scope: 'public_profile,email,pages_show_list,instagram_basic,instagram_manage_comments',
+    // Need pages_show_list to get pages, instagram_basic to get IG accounts, and business_management to access IG via Business Manager
+    scope: 'public_profile,email,pages_show_list,instagram_basic,instagram_manage_comments,business_management',
     responseType: 'code',
   },
   zalo: {
