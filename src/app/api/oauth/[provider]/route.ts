@@ -218,7 +218,7 @@ function getClientId(provider: string): string {
   const clientIds = {
     facebook: process.env.FACEBOOK_CLIENT_ID!,
     instagram: process.env.FACEBOOK_CLIENT_ID!, // Instagram uses Facebook app
-    zalo: process.env.ZALO_APP_ID!,
+    zalo: process.env.ZALO_OA_ID!, // Use OA ID for Zalo OA OAuth
   };
 
   return clientIds[provider as keyof typeof clientIds];
@@ -274,7 +274,7 @@ function getClientSecret(provider: string): string {
   const secrets = {
     facebook: process.env.FACEBOOK_CLIENT_SECRET!,
     instagram: process.env.FACEBOOK_CLIENT_SECRET!,
-    zalo: process.env.ZALO_APP_SECRET!,
+    zalo: process.env.ZALO_OA_SECRET!, // Use OA Secret for Zalo OA OAuth
   };
   return secrets[provider as keyof typeof secrets];
 }
