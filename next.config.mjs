@@ -3,6 +3,9 @@ import {withSentryConfig} from '@sentry/nextjs';
 const nextConfig = {
   experimental: {
     typedRoutes: false, // Disable strict typing for routes to allow string URLs
+    serverActions: {
+      bodySizeLimit: '100mb', // Increase body size limit for App Router
+    },
   },
   typescript: {
     // Allow production builds to succeed even if there are type errors
