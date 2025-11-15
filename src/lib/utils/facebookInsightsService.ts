@@ -68,6 +68,12 @@ export class FacebookInsightsService {
     userId: string
   ): Promise<PostInsights | null> {
     try {
+      // Validate post ID format
+      if (!postId || postId.trim() === '') {
+        logger.warn('Invalid post ID', { postId });
+        return null;
+      }
+
       // Fetch post details and insights with rate limiting
       const postData = await withRateLimit('facebook', userId, async () => {
         const response = await fetch(
@@ -75,11 +81,28 @@ export class FacebookInsightsService {
         );
 
         if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          
+          // Check if post doesn't exist or access denied
+          if (response.status === 404 || response.status === 400) {
+            logger.warn('Post not found or no access', { 
+              postId, 
+              status: response.status,
+              error: errorData 
+            });
+            return null;
+          }
+          
           throw new Error(`Facebook API error: ${response.statusText}`);
         }
 
         return await response.json();
       });
+
+      // If post not found, return null
+      if (!postData) {
+        return null;
+      }
 
       // Fetch insights (reach, impressions)
       let insightsData;
@@ -97,8 +120,12 @@ export class FacebookInsightsService {
 
           return await response.json();
         });
-      } catch (error) {
-        logger.warn('Failed to fetch post insights', { postId, error });
+      } catch (error: any) {
+        logger.warn('Failed to fetch post insights (this is normal for old posts or posts without insights permission)', { 
+          postId, 
+          error: error.message,
+          errorCode: error.code 
+        });
         insightsData = null;
       }
 
