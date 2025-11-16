@@ -3,7 +3,8 @@
 import { useState, useEffect } from 'react';
 import { PROVIDERS } from '@/lib/constants';
 import ContentPlanAssistant from '@/components/features/compose/ContentPlanAssistant';
-import type { AIContentPlanDay, AIContentPlanSlot } from '@/types/ai';
+import type { AIContentPlanDay, AIContentPlanSlot, AIContentPlanResponse } from '@/types/ai';
+import { mapProvidersToAPI } from '@/lib/constants';
 
 interface ComposeData {
   title: string;
@@ -102,50 +103,126 @@ export default function ComposeRightPanel({
   const providerExists = (platformKey: string): platformKey is keyof typeof PROVIDERS =>
     Object.prototype.hasOwnProperty.call(PROVIDERS, platformKey);
 
-  const applyPlanSlot = (day: AIContentPlanDay, slot: AIContentPlanSlot) => {
+  const applyPlanSlot = async (day: AIContentPlanDay, slot: AIContentPlanSlot) => {
     const normalizedPlatform = slot.platform.toLowerCase();
     const normalizedTime = slot.time.length > 5 ? slot.time.slice(0, 5) : slot.time;
     const scheduleValue = `${day.date}T${normalizedTime}`;
 
-    const updatedChannelSet = new Set(selectedChannels);
-    if (providerExists(normalizedPlatform)) {
-      updatedChannelSet.add(normalizedPlatform);
-    }
-
-    setScheduleAt(scheduleValue);
-    setSelectedChannels(updatedChannelSet);
-
-    const updates: Partial<ComposeData> = {
-      scheduleAt: scheduleValue,
-      channels: Array.from(updatedChannelSet),
-    };
-
-    if (slot.captionIdea) {
-      updates.content = slot.captionIdea;
-    }
-
-    if (slot.angle) {
-      updates.title = slot.angle;
-    }
-
-    if (slot.recommendedHashtags && slot.recommendedHashtags.length > 0) {
-      const platformLabel = providerExists(normalizedPlatform)
-        ? PROVIDERS[normalizedPlatform].label
-        : composeData.metadata?.platform || 'Facebook Page';
-
-      updates.metadata = {
-        ...(composeData.metadata || { platform: platformLabel, ratio: '1:1' }),
-        platform: platformLabel,
-        hashtags: slot.recommendedHashtags.join(' '),
+    try {
+      // Create scheduled post in database
+      const requestBody = {
+        title: slot.angle || slot.captionIdea?.substring(0, 100) || 'AI Generated Post',
+        content: slot.captionIdea || '',
+        providers: mapProvidersToAPI([normalizedPlatform]),
+        scheduled_at: new Date(scheduleValue).toISOString(),
+        media_urls: [],
+        media_type: 'none',
+        metadata: {
+          type: 'social',
+          platform: providerExists(normalizedPlatform) 
+            ? PROVIDERS[normalizedPlatform].label 
+            : normalizedPlatform,
+          ratio: '1:1',
+          hashtags: slot.recommendedHashtags?.join(' ') || '',
+          ai_generated: true,
+          ai_angle: slot.angle,
+        }
       };
+
+      console.log('📅 [AI PLAN] Creating scheduled post:', requestBody);
+
+      const response = await fetch('/api/posts', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestBody),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Không thể tạo lịch đăng');
+      }
+
+      const result = await response.json();
+      console.log('✅ [AI PLAN] Scheduled post created:', result);
+
+      // Update UI state to reflect the applied slot
+      const updatedChannelSet = new Set(selectedChannels);
+      if (providerExists(normalizedPlatform)) {
+        updatedChannelSet.add(normalizedPlatform);
+      }
+
+      setScheduleAt(scheduleValue);
+      setSelectedChannels(updatedChannelSet);
+
+      const updates: Partial<ComposeData> = {
+        scheduleAt: scheduleValue,
+        channels: Array.from(updatedChannelSet),
+        content: slot.captionIdea,
+        title: slot.angle,
+      };
+
+      if (slot.recommendedHashtags && slot.recommendedHashtags.length > 0) {
+        const platformLabel = providerExists(normalizedPlatform)
+          ? PROVIDERS[normalizedPlatform].label
+          : composeData.metadata?.platform || 'Facebook Page';
+
+        updates.metadata = {
+          ...(composeData.metadata || { platform: platformLabel, ratio: '1:1' }),
+          platform: platformLabel,
+          hashtags: slot.recommendedHashtags.join(' '),
+        };
+      }
+
+      onDataChange(updates);
+      
+      return result;
+    } catch (error) {
+      console.error('❌ [AI PLAN] Failed to create scheduled post:', error);
+      throw error;
+    }
+  };
+
+  const applyAllSlots = async (plan: AIContentPlanResponse) => {
+    const allSlots: Array<{ day: AIContentPlanDay; slot: AIContentPlanSlot }> = [];
+    
+    for (const day of plan.plan) {
+      for (const slot of day.slots) {
+        allSlots.push({ day, slot });
+      }
     }
 
-    onDataChange(updates);
-    showToast?.({
-      type: 'success',
-      message: `Đã áp dụng gợi ý ${slot.platform.toUpperCase()} lúc ${slot.time}.`,
-      title: 'AI Trợ lý',
-    });
+    console.log(`📅 [AI PLAN] Creating ${allSlots.length} scheduled posts...`);
+
+    const results = [];
+    const errors = [];
+
+    for (const { day, slot } of allSlots) {
+      try {
+        const result = await applyPlanSlot(day, slot);
+        results.push(result);
+        
+        // Small delay to avoid rate limiting
+        await new Promise(resolve => setTimeout(resolve, 200));
+      } catch (error) {
+        console.error('❌ [AI PLAN] Failed to create slot:', { day, slot, error });
+        errors.push({
+          day: day.date,
+          slot: `${slot.platform} ${slot.time}`,
+          error: error instanceof Error ? error.message : 'Unknown error'
+        });
+      }
+    }
+
+    console.log(`✅ [AI PLAN] Created ${results.length}/${allSlots.length} scheduled posts`);
+    
+    if (errors.length > 0) {
+      console.error('❌ [AI PLAN] Errors:', errors);
+      throw new Error(`Đã tạo ${results.length}/${allSlots.length} lịch đăng. ${errors.length} lỗi.`);
+    }
+
+    return results;
   };
 
   const handleQuickTime = (hour: string) => {
@@ -293,6 +370,7 @@ export default function ComposeRightPanel({
       <ContentPlanAssistant
         composeData={composeData}
         onApplySlot={applyPlanSlot}
+        onApplyAll={applyAllSlots}
         showToast={showToast}
       />
 

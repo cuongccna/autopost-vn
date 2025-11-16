@@ -30,8 +30,9 @@ interface ToastOptions {
 
 interface ContentPlanAssistantProps {
   composeData: ComposeSnapshot;
-  onApplySlot: (day: AIContentPlanDay, slot: AIContentPlanSlot) => void;
+  onApplySlot: (day: AIContentPlanDay, slot: AIContentPlanSlot) => void | Promise<void>;
   showToast?: (options: ToastOptions) => void;
+  onApplyAll?: (plan: AIContentPlanResponse) => Promise<any>;
 }
 
 interface PlannerFormState {
@@ -60,11 +61,12 @@ const initialEndDate = () => {
   return toDateInputValue(date);
 };
 
-export default function ContentPlanAssistant({ composeData, onApplySlot, showToast }: ContentPlanAssistantProps) {
+export default function ContentPlanAssistant({ composeData, onApplySlot, showToast, onApplyAll }: ContentPlanAssistantProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [plan, setPlan] = useState<AIContentPlanResponse | null>(null);
   const [requestMeta, setRequestMeta] = useState<{ generatedAt: string; timeframe: string } | null>(null);
   const [loading, setLoading] = useState(false);
+  const [applyingAll, setApplyingAll] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const defaultStart = useMemo(() => toDateInputValue(new Date()), []);
@@ -175,14 +177,48 @@ export default function ContentPlanAssistant({ composeData, onApplySlot, showToa
     }
   };
 
-  const handleApply = (day: AIContentPlanDay, slot: AIContentPlanSlot) => {
-    onApplySlot(day, slot);
-    showToast?.({
-      type: 'success',
-      message: `Đã áp dụng gợi ý ${slot.platform.toUpperCase()} lúc ${slot.time}.`,
-      title: 'AI Trợ lý',
-    });
-    setIsOpen(false);
+  const handleApply = async (day: AIContentPlanDay, slot: AIContentPlanSlot) => {
+    try {
+      // Call parent's onApplySlot which should create the scheduled post
+      await onApplySlot(day, slot);
+      
+      showToast?.({
+        type: 'success',
+        message: `Đã tạo lịch đăng ${slot.platform.toUpperCase()} vào ${new Date(`${day.date}T${slot.time}`).toLocaleString('vi-VN')}.`,
+        title: '✅ Áp dụng thành công',
+      });
+    } catch (error) {
+      showToast?.({
+        type: 'error',
+        message: error instanceof Error ? error.message : 'Không thể tạo lịch đăng',
+        title: '❌ Lỗi',
+      });
+    }
+  };
+
+  const handleApplyAll = async () => {
+    if (!plan || !onApplyAll) return;
+    
+    setApplyingAll(true);
+    try {
+      await onApplyAll(plan);
+      
+      const totalSlots = plan.plan.reduce((acc, day) => acc + day.slots.length, 0);
+      showToast?.({
+        type: 'success',
+        message: `Đã tạo ${totalSlots} lịch đăng từ ${plan.plan[0]?.date} đến ${plan.plan[plan.plan.length - 1]?.date}.`,
+        title: '✅ Áp dụng tất cả thành công',
+      });
+      setIsOpen(false);
+    } catch (error) {
+      showToast?.({
+        type: 'error',
+        message: error instanceof Error ? error.message : 'Không thể áp dụng tất cả lịch đăng',
+        title: '❌ Lỗi',
+      });
+    } finally {
+      setApplyingAll(false);
+    }
   };
 
   return (
@@ -394,6 +430,37 @@ export default function ContentPlanAssistant({ composeData, onApplySlot, showToa
 
               {plan && (
                 <section className="space-y-4">
+                  {/* Apply All Button */}
+                  {onApplyAll && plan.plan.length > 0 && (
+                    <div className="bg-gradient-to-r from-blue-50 to-purple-50 border-2 border-blue-200 rounded-xl p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h4 className="font-semibold text-gray-900">Áp dụng toàn bộ kế hoạch</h4>
+                          <p className="text-sm text-gray-600 mt-1">
+                            Tạo {plan.plan.reduce((acc, day) => acc + day.slots.length, 0)} lịch đăng tự động từ {new Date(plan.plan[0].date).toLocaleDateString('vi-VN')} đến {new Date(plan.plan[plan.plan.length - 1].date).toLocaleDateString('vi-VN')}
+                          </p>
+                        </div>
+                        <button
+                          onClick={handleApplyAll}
+                          disabled={applyingAll}
+                          className="px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white font-medium rounded-lg hover:from-blue-700 hover:to-purple-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                        >
+                          {applyingAll ? (
+                            <>
+                              <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                              </svg>
+                              Đang áp dụng...
+                            </>
+                          ) : (
+                            <>🚀 Áp dụng tất cả</>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
                   {plan.plan.map(day => (
                     <div key={day.date} className="border border-gray-200 rounded-xl p-4 space-y-3">
                       <div>
