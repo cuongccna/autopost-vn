@@ -17,6 +17,7 @@ export interface UploadedMedia {
 
 interface MediaUploaderProps {
   onMediaChange: (media: UploadedMedia[]) => void;
+  value?: UploadedMedia[]; // Controlled mode
   maxFiles?: number;
   acceptImages?: boolean;
   acceptVideos?: boolean;
@@ -25,12 +26,22 @@ interface MediaUploaderProps {
 
 export default function MediaUploader({
   onMediaChange,
+  value,
   maxFiles = 10,
   acceptImages = true,
   acceptVideos = true,
   className = ''
 }: MediaUploaderProps) {
-  const [media, setMedia] = useState<UploadedMedia[]>([]);
+  // Use controlled mode if value is provided, otherwise use internal state
+  const [internalMedia, setInternalMedia] = useState<UploadedMedia[]>([]);
+  const media = value !== undefined ? value : internalMedia;
+  const setMedia = (newMedia: UploadedMedia[]) => {
+    if (value === undefined) {
+      setInternalMedia(newMedia);
+    }
+    onMediaChange(newMedia);
+  };
+  
   const [uploading, setUploading] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);

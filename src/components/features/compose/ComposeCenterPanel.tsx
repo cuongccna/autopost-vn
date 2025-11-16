@@ -105,6 +105,8 @@ export default function ComposeCenterPanel({
   };
 
   const handleImagesChange = (media: UploadedMedia[]) => {
+    console.log('🖼️ [MEDIA CHANGE] Received media:', media.length, media);
+    
     // Check for mixed media types (video + images)
     const hasVideo = media.some(m => m.mediaType === 'video');
     const hasImage = media.some(m => m.mediaType === 'image');
@@ -118,11 +120,14 @@ export default function ComposeCenterPanel({
       // Remove the last uploaded file (the one causing the conflict)
       const filteredMedia = media.slice(0, -1);
       setUploadedMedia(filteredMedia);
+      console.log('🖼️ [MEDIA CHANGE] Filtered media (removed last):', filteredMedia);
       return;
     }
     
     setUploadedMedia(media);
     const mediaUrls = media.map(m => m.url);
+    
+    console.log('🖼️ [MEDIA CHANGE] Media URLs extracted:', mediaUrls);
     
     // Determine media type
     let mediaType: 'image' | 'video' | 'album' | 'none' = 'none';
@@ -137,6 +142,12 @@ export default function ComposeCenterPanel({
       }
     }
     
+    console.log('🖼️ [MEDIA CHANGE] Calling onDataChange with:', {
+      mediaUrls,
+      mediaType,
+      totalMedia: media.length
+    });
+    
     onDataChange({
       ...composeData,
       mediaUrls,
@@ -145,6 +156,9 @@ export default function ComposeCenterPanel({
   };
 
   const handleMediaFromLibrary = (selectedMedia: any[]) => {
+    console.log('📚 [MEDIA LIBRARY] Selected media from library:', selectedMedia);
+    console.log('📚 [MEDIA LIBRARY] Current uploaded media:', uploadedMedia);
+    
     const mediaForUpload: UploadedMedia[] = selectedMedia.map(item => ({
       name: item.file_name,
       type: item.file_type,
@@ -155,7 +169,12 @@ export default function ComposeCenterPanel({
       mediaType: item.media_type,
     }));
     
-    handleImagesChange([...uploadedMedia, ...mediaForUpload]);
+    console.log('📚 [MEDIA LIBRARY] Converted media:', mediaForUpload);
+    
+    const mergedMedia = [...uploadedMedia, ...mediaForUpload];
+    console.log('📚 [MEDIA LIBRARY] Merged media (total):', mergedMedia.length, mergedMedia);
+    
+    handleImagesChange(mergedMedia);
   };
 
   // AI actions are handled centrally via AIQuickActions component
@@ -328,6 +347,7 @@ export default function ComposeCenterPanel({
             <div className="flex gap-2 mb-2">
               <div className="flex-1">
                 <MediaUploader
+                  value={uploadedMedia}
                   onMediaChange={handleImagesChange}
                   maxFiles={10}
                   acceptImages={true}
