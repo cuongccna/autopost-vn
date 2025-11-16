@@ -485,10 +485,26 @@ export class InstagramPublisher extends BaseSocialPublisher {
       // Detect if it's a video (basic check)
       const isVideo = this.isVideoUrl(data.mediaUrls[0]);
       if (isVideo) {
-        mediaData.media_type = 'VIDEO';
+        // ✅ Instagram now requires REELS for video content (2024+ API change)
+        // VIDEO media_type has been deprecated and no longer supported
+        mediaData.media_type = 'REELS';
         delete mediaData.image_url;
         mediaData.video_url = data.mediaUrls[0];
+        // Optional: share to main feed as well as Reels tab
+        mediaData.share_to_feed = true;
+        
+        console.log('🎬 Preparing REELS container:', {
+          video_url: data.mediaUrls[0],
+          media_type: 'REELS',
+          share_to_feed: true
+        });
       }
+
+      console.log('📤 Creating Instagram media container...', {
+        accountId,
+        mediaType: isVideo ? 'REELS' : 'IMAGE',
+        hasCaption: !!data.content
+      });
 
       const mediaResponse = await fetch(`https://graph.facebook.com/v18.0/${accountId}/media`, {
         method: 'POST',
@@ -581,6 +597,8 @@ export class InstagramPublisher extends BaseSocialPublisher {
         };
 
         if (isVideo) {
+          // ⚠️ Note: For carousel items, VIDEO type is still supported
+          // Only standalone video posts require REELS media_type
           mediaData.media_type = 'VIDEO';
           mediaData.video_url = mediaUrl;
         } else {
@@ -733,20 +751,26 @@ export class InstagramPublisher extends BaseSocialPublisher {
    */
   private getInstagramErrorMessage(result: any): string {
     if (result.error) {
-      const { message, code, error_user_title, error_user_msg } = result.error;
+      const { message, code, error_user_title, error_user_msg, error_subcode } = result.error;
       
       // Common Instagram error codes
       switch (code) {
         case 190:
           return 'Token Instagram đã hết hạn. Vui lòng kết nối lại tài khoản.';
         case 100:
-          return 'Thông số không hợp lệ. Vui lòng kiểm tra lại nội dung và hình ảnh.';
+          // Check for specific subcodes
+          if (error_subcode === 2207067) {
+            return 'Instagram không còn hỗ trợ media_type VIDEO. Vui lòng cập nhật app để sử dụng REELS cho video.';
+          }
+          return error_user_msg || 'Thông số không hợp lệ. Vui lòng kiểm tra lại nội dung và hình ảnh.';
         case 9007:
           return 'Tài khoản Instagram không có quyền đăng bài. Cần chuyển sang Business/Creator account.';
         case 9004:
           return 'Nội dung hoặc hình ảnh vi phạm chính sách của Instagram.';
         case 36000:
           return 'Đã đạt giới hạn số lượng bài đăng trong ngày.';
+        case 10:
+          return 'Thiếu quyền truy cập. Vui lòng kết nối lại tài khoản Instagram với đầy đủ permissions.';
         default:
           return error_user_msg || message || 'Lỗi không xác định từ Instagram API.';
       }
