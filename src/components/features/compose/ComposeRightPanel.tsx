@@ -106,7 +106,28 @@ export default function ComposeRightPanel({
   const applyPlanSlot = async (day: AIContentPlanDay, slot: AIContentPlanSlot) => {
     const normalizedPlatform = slot.platform.toLowerCase();
     const normalizedTime = slot.time.length > 5 ? slot.time.slice(0, 5) : slot.time;
-    const scheduleValue = `${day.date}T${normalizedTime}`;
+    
+    // Parse date correctly - ensure it's in YYYY-MM-DD format
+    let dateStr = day.date;
+    
+    // If date is in DD/MM/YYYY format, convert to YYYY-MM-DD
+    if (dateStr.includes('/')) {
+      const parts = dateStr.split('/');
+      if (parts.length === 3) {
+        // DD/MM/YYYY -> YYYY-MM-DD
+        dateStr = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+      }
+    }
+    
+    const scheduleValue = `${dateStr}T${normalizedTime}`;
+    
+    // Create Date object in local timezone
+    const localDate = new Date(scheduleValue);
+    
+    // Validate date
+    if (isNaN(localDate.getTime())) {
+      throw new Error(`Ngày không hợp lệ: ${day.date} ${slot.time}`);
+    }
 
     try {
       // Create scheduled post in database
@@ -114,7 +135,7 @@ export default function ComposeRightPanel({
         title: slot.angle || slot.captionIdea?.substring(0, 100) || 'AI Generated Post',
         content: slot.captionIdea || '',
         providers: mapProvidersToAPI([normalizedPlatform]),
-        scheduled_at: new Date(scheduleValue).toISOString(),
+        scheduled_at: localDate.toISOString(),
         media_urls: [],
         media_type: 'none',
         metadata: {
@@ -129,7 +150,17 @@ export default function ComposeRightPanel({
         }
       };
 
-      console.log('📅 [AI PLAN] Creating scheduled post:', requestBody);
+      console.log('📅 [AI PLAN] Creating scheduled post:', {
+        ...requestBody,
+        debug: {
+          originalDate: day.date,
+          parsedDate: dateStr,
+          time: slot.time,
+          scheduleValue,
+          localDate: localDate.toLocaleString('vi-VN'),
+          isoString: localDate.toISOString()
+        }
+      });
 
       const response = await fetch('/api/posts', {
         method: 'POST',
