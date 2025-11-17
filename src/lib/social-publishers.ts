@@ -763,6 +763,12 @@ export class InstagramPublisher extends BaseSocialPublisher {
             return 'Instagram không còn hỗ trợ media_type VIDEO. Vui lòng cập nhật app để sử dụng REELS cho video.';
           }
           return error_user_msg || 'Thông số không hợp lệ. Vui lòng kiểm tra lại nội dung và hình ảnh.';
+        case -1:
+          // Transcoding errors
+          if (error_subcode === 2207082) {
+            return 'Video không đúng định dạng Instagram yêu cầu. Vui lòng re-encode video với: H.264 codec, AAC audio, MP4 container, progressive scan (không interlaced), max 1080p, max 5Mbps bitrate. Dùng ffmpeg: ffmpeg -i input.mp4 -c:v libx264 -preset slow -crf 22 -c:a aac -b:a 128k -movflags +faststart -pix_fmt yuv420p -vf "scale=\'min(1920,iw)\':\'min(1080,ih)\':force_original_aspect_ratio=decrease,pad=ceil(iw/2)*2:ceil(ih/2)*2" output.mp4';
+          }
+          return error_user_msg || error_user_title || 'Lỗi xử lý media từ Instagram.';
         case 9007:
           return 'Tài khoản Instagram không có quyền đăng bài. Cần chuyển sang Business/Creator account.';
         case 9004:

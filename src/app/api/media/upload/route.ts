@@ -4,6 +4,15 @@ import { authOptions } from '@/lib/auth';
 import { localStorageService } from '@/lib/services/localStorageService';
 import { insert } from '@/lib/db/postgres';
 import { v4 as uuidv4 } from 'uuid';
+import { 
+  checkFFmpegInstalled, 
+  getVideoInfo, 
+  transcodeForInstagram, 
+  validateInstagramVideo 
+} from '@/lib/services/videoTranscoder';
+import fs from 'fs';
+import path from 'path';
+import os from 'os';
 
 // Disable body parser for file uploads
 export const runtime = 'nodejs';
@@ -99,9 +108,71 @@ export async function POST(request: NextRequest) {
 
     // Convert File to Buffer
     const arrayBuffer = await file.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
+    let buffer = Buffer.from(arrayBuffer);
 
     console.log('💾 [MEDIA UPLOAD] File converted to buffer, size:', buffer.length);
+
+    // Video transcoding for Instagram compatibility
+    let videoTranscoded = false;
+    let videoInfo: any = null;
+    
+    if (isVideo) {
+      console.log('🎬 [VIDEO TRANSCODE] Checking if video needs transcoding...');
+      
+      // Check if FFmpeg is available
+      const hasFFmpeg = await checkFFmpegInstalled();
+      
+      if (hasFFmpeg) {
+        try {
+          // Save buffer to temp file for analysis
+          const tempDir = os.tmpdir();
+          const tempInputPath = path.join(tempDir, `upload_${uuidv4()}.${extension}`);
+          fs.writeFileSync(tempInputPath, buffer);
+          
+          console.log('📊 [VIDEO TRANSCODE] Analyzing video at:', tempInputPath);
+          
+          // Get video info
+          videoInfo = await getVideoInfo(tempInputPath);
+          console.log('📹 [VIDEO TRANSCODE] Video info:', videoInfo);
+          
+          // Validate for Instagram
+          const validation = await validateInstagramVideo(tempInputPath);
+          console.log('✅ [VIDEO TRANSCODE] Validation result:', validation);
+          
+          if (!validation.valid || videoInfo.needsTranscoding) {
+            console.log('🔄 [VIDEO TRANSCODE] Transcoding required...');
+            
+            const tempOutputPath = path.join(tempDir, `transcoded_${uuidv4()}.mp4`);
+            
+            // Transcode video
+            const transcodedPath = await transcodeForInstagram(tempInputPath, tempOutputPath);
+            console.log('✅ [VIDEO TRANSCODE] Transcoding complete:', transcodedPath);
+            
+            // Read transcoded file
+            buffer = fs.readFileSync(transcodedPath);
+            videoTranscoded = true;
+            
+            // Clean up temp files
+            fs.unlinkSync(tempInputPath);
+            fs.unlinkSync(transcodedPath);
+            
+            console.log('🎉 [VIDEO TRANSCODE] Video transcoded successfully, new size:', buffer.length);
+          } else {
+            console.log('✅ [VIDEO TRANSCODE] Video already compatible, no transcoding needed');
+            // Clean up temp file
+            fs.unlinkSync(tempInputPath);
+          }
+          
+        } catch (transcodeError) {
+          console.error('⚠️ [VIDEO TRANSCODE] Transcoding failed:', transcodeError);
+          console.log('📤 [VIDEO TRANSCODE] Uploading original video anyway...');
+          // Continue with original file if transcoding fails
+        }
+      } else {
+        console.warn('⚠️ [VIDEO TRANSCODE] FFmpeg not installed, skipping transcoding');
+        console.log('💡 [VIDEO TRANSCODE] Install FFmpeg to enable automatic video optimization');
+      }
+    }
 
     // Get workspace_id from session if available
     const workspaceId = (session.user as any).workspace_id || null;
@@ -155,6 +226,17 @@ export async function POST(request: NextRequest) {
           uploaded_at: new Date().toISOString(),
           storage_type: 'local',
           content_type: file.type,
+          transcoded: videoTranscoded,
+          ...(videoInfo && {
+            video_info: {
+              duration: videoInfo.duration,
+              width: videoInfo.width,
+              height: videoInfo.height,
+              codec: videoInfo.codec,
+              bitrate: videoInfo.bitrate,
+              fps: videoInfo.fps
+            }
+          })
         },
       });
       mediaRecord = mediaRecords[0];
@@ -172,16 +254,18 @@ export async function POST(request: NextRequest) {
       fileName: file.name,
       mediaType: isImage ? 'image' : 'video',
       size: file.size,
-      url: publicUrl
+      url: publicUrl,
+      transcoded: videoTranscoded
     });
 
     return NextResponse.json({
       success: true,
+      transcoded: videoTranscoded,
       file: {
         id: mediaRecord?.id, // Include media ID for reference
         name: file.name,
         type: file.type,
-        size: file.size,
+        size: buffer.length, // Use actual buffer size (might be different if transcoded)
         url: publicUrl,
         path: uploadResult.path, // Use the actual path from uploadResult
         bucket: 'local', // Add bucket identifier for compatibility
