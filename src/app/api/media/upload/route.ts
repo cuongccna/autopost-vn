@@ -10,6 +10,12 @@ import {
   transcodeForInstagram, 
   validateInstagramVideo 
 } from '@/lib/services/videoTranscoder';
+import {
+  getImageInfo,
+  validateFacebookImage,
+  validateInstagramImage,
+  autoOptimizeForPlatform
+} from '@/lib/services/imageValidator';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
@@ -111,6 +117,115 @@ export async function POST(request: NextRequest) {
     let buffer = Buffer.from(arrayBuffer);
 
     console.log('💾 [MEDIA UPLOAD] File converted to buffer, size:', buffer.length);
+
+    // Image validation and optimization
+    let imageOptimized = false;
+    let imageInfo: any = null;
+    let imageValidation: any = null;
+    
+    if (isImage) {
+      console.log('🖼️ [IMAGE VALIDATE] Checking image quality and compatibility...');
+      
+      // Check if FFmpeg is available
+      const hasFFmpeg = await checkFFmpegInstalled();
+      
+      if (hasFFmpeg) {
+        try {
+          // Save buffer to temp file for analysis
+          const tempDir = os.tmpdir();
+          const tempInputPath = path.join(tempDir, `upload_${uuidv4()}.${extension}`);
+          fs.writeFileSync(tempInputPath, buffer);
+          
+          console.log('📊 [IMAGE VALIDATE] Analyzing image at:', tempInputPath);
+          
+          // Get image info
+          imageInfo = await getImageInfo(tempInputPath);
+          console.log('📐 [IMAGE VALIDATE] Image info:', {
+            dimensions: `${imageInfo.width}x${imageInfo.height}`,
+            format: imageInfo.format,
+            aspectRatio: imageInfo.aspectRatio.toFixed(2),
+            orientation: imageInfo.orientation,
+            sizeMB: (imageInfo.size / 1024 / 1024).toFixed(2)
+          });
+          
+          // Validate for Instagram (stricter requirements)
+          const instagramValidation = await validateInstagramImage(tempInputPath);
+          const facebookValidation = await validateFacebookImage(tempInputPath);
+          
+          console.log('✅ [IMAGE VALIDATE] Instagram validation:', {
+            valid: instagramValidation.valid,
+            errors: instagramValidation.errors,
+            warnings: instagramValidation.warnings,
+            needsOptimization: instagramValidation.needsOptimization
+          });
+          
+          console.log('✅ [IMAGE VALIDATE] Facebook validation:', {
+            valid: facebookValidation.valid,
+            errors: facebookValidation.errors,
+            warnings: facebookValidation.warnings,
+            needsOptimization: facebookValidation.needsOptimization
+          });
+          
+          // Store validation results
+          imageValidation = {
+            instagram: instagramValidation,
+            facebook: facebookValidation
+          };
+          
+          // Auto-optimize if needed (use Instagram requirements as they are stricter)
+          if (instagramValidation.needsOptimization) {
+            console.log('🔄 [IMAGE OPTIMIZE] Optimization required...');
+            
+            const tempOutputPath = path.join(tempDir, `optimized_${uuidv4()}.jpg`);
+            
+            // Optimize for Instagram (stricter requirements)
+            const optimizeResult = await autoOptimizeForPlatform(
+              tempInputPath,
+              tempOutputPath,
+              'instagram'
+            );
+            
+            if (optimizeResult.success && optimizeResult.optimized) {
+              console.log('✅ [IMAGE OPTIMIZE] Optimization complete');
+              
+              // Read optimized file
+              buffer = fs.readFileSync(tempOutputPath);
+              imageOptimized = true;
+              
+              // Clean up temp files
+              fs.unlinkSync(tempInputPath);
+              fs.unlinkSync(tempOutputPath);
+              
+              // Get updated image info
+              const optimizedTempPath = path.join(tempDir, `final_${uuidv4()}.jpg`);
+              fs.writeFileSync(optimizedTempPath, buffer);
+              imageInfo = await getImageInfo(optimizedTempPath);
+              fs.unlinkSync(optimizedTempPath);
+              
+              console.log('🎉 [IMAGE OPTIMIZE] Image optimized successfully:', {
+                originalSize: file.size,
+                newSize: buffer.length,
+                savings: `${(((file.size - buffer.length) / file.size) * 100).toFixed(1)}%`,
+                dimensions: `${imageInfo.width}x${imageInfo.height}`
+              });
+            } else {
+              console.log('⚠️ [IMAGE OPTIMIZE] Using original image:', optimizeResult.error);
+              fs.unlinkSync(tempInputPath);
+            }
+          } else {
+            console.log('✅ [IMAGE VALIDATE] Image already optimal, no optimization needed');
+            fs.unlinkSync(tempInputPath);
+          }
+          
+        } catch (optimizeError) {
+          console.error('⚠️ [IMAGE OPTIMIZE] Optimization failed:', optimizeError);
+          console.log('📤 [IMAGE OPTIMIZE] Uploading original image anyway...');
+        }
+      } else {
+        console.warn('⚠️ [IMAGE VALIDATE] FFmpeg not installed, skipping image validation');
+        console.log('💡 [IMAGE VALIDATE] Install FFmpeg to enable automatic image optimization');
+      }
+    }
 
     // Video transcoding for Instagram compatibility
     let videoTranscoded = false;
@@ -227,6 +342,7 @@ export async function POST(request: NextRequest) {
           storage_type: 'local',
           content_type: file.type,
           transcoded: videoTranscoded,
+          optimized: imageOptimized,
           ...(videoInfo && {
             video_info: {
               duration: videoInfo.duration,
@@ -235,6 +351,29 @@ export async function POST(request: NextRequest) {
               codec: videoInfo.codec,
               bitrate: videoInfo.bitrate,
               fps: videoInfo.fps
+            }
+          }),
+          ...(imageInfo && {
+            image_info: {
+              width: imageInfo.width,
+              height: imageInfo.height,
+              format: imageInfo.format,
+              aspectRatio: imageInfo.aspectRatio,
+              orientation: imageInfo.orientation
+            }
+          }),
+          ...(imageValidation && {
+            image_validation: {
+              instagram: {
+                valid: imageValidation.instagram.valid,
+                errors: imageValidation.instagram.errors,
+                warnings: imageValidation.instagram.warnings
+              },
+              facebook: {
+                valid: imageValidation.facebook.valid,
+                errors: imageValidation.facebook.errors,
+                warnings: imageValidation.facebook.warnings
+              }
             }
           })
         },
@@ -255,12 +394,15 @@ export async function POST(request: NextRequest) {
       mediaType: isImage ? 'image' : 'video',
       size: file.size,
       url: publicUrl,
-      transcoded: videoTranscoded
+      transcoded: videoTranscoded,
+      optimized: imageOptimized
     });
 
     return NextResponse.json({
       success: true,
       transcoded: videoTranscoded,
+      optimized: imageOptimized,
+      validation: imageValidation,
       file: {
         id: mediaRecord?.id, // Include media ID for reference
         name: file.name,
