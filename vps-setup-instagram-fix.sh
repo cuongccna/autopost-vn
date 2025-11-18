@@ -30,6 +30,32 @@ if [ ! -d "$APP_DIR" ]; then
 fi
 echo "${GREEN}✅ App directory found${NC}"
 
+# Find actual NGINX config file
+echo ""
+echo "${YELLOW}Finding NGINX configuration...${NC}"
+if [ -f "/etc/nginx/sites-available/autopostvn.cloud" ]; then
+    NGINX_SITES_AVAILABLE="/etc/nginx/sites-available/autopostvn.cloud"
+elif [ -f "/etc/nginx/conf.d/autopostvn.cloud.conf" ]; then
+    NGINX_SITES_AVAILABLE="/etc/nginx/conf.d/autopostvn.cloud.conf"
+elif [ -f "/etc/nginx/nginx.conf" ]; then
+    NGINX_SITES_AVAILABLE="/etc/nginx/nginx.conf"
+    echo "${YELLOW}⚠️  Using main nginx.conf${NC}"
+else
+    echo "${RED}❌ NGINX config not found!${NC}"
+    echo "Please manually add this to your NGINX config:"
+    echo ""
+    echo "location /uploads/ {"
+    echo "    alias /var/www/autopost-vn/public/uploads/;"
+    echo "    expires 1y;"
+    echo "    add_header Cache-Control \"public, immutable\";"
+    echo "    add_header Access-Control-Allow-Origin \"*\";"
+    echo "    try_files \$uri =404;"
+    echo "}"
+    echo ""
+    exit 1
+fi
+echo "${GREEN}✅ Found config: $NGINX_SITES_AVAILABLE${NC}"
+
 # Check if uploads directory exists
 if [ ! -d "$APP_DIR/public/uploads" ]; then
     echo "${YELLOW}⚠️  Creating uploads directory...${NC}"
