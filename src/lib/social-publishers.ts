@@ -597,9 +597,9 @@ export class InstagramPublisher extends BaseSocialPublisher {
         };
 
         if (isVideo) {
-          // ⚠️ Note: For carousel items, VIDEO type is still supported
-          // Only standalone video posts require REELS media_type
-          mediaData.media_type = 'VIDEO';
+          // ✅ Updated Nov 2025: Use REELS for all video content including carousel items
+          // Instagram API now requires REELS for better compatibility
+          mediaData.media_type = 'REELS';
           mediaData.video_url = mediaUrl;
         } else {
           mediaData.image_url = mediaUrl;
@@ -710,31 +710,61 @@ export class InstagramPublisher extends BaseSocialPublisher {
   }
 
   /**
-   * Wait for media processing to complete (especially for videos)
+   * Wait for media processing to complete and check status
+   * Status codes: FINISHED, IN_PROGRESS, ERROR, EXPIRED
    */
   private async waitForMediaProcessing(mediaId: string, accessToken: string): Promise<void> {
-    const maxAttempts = 10;
-    const delay = 2000; // 2 seconds
+    const maxAttempts = 30; // Increased for large videos (up to 60 seconds)
+    const delay = 2000; // 2 seconds per attempt
+
+    console.log(`🔍 Checking media container status: ${mediaId}`);
 
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       try {
-        const response = await fetch(`https://graph.facebook.com/v18.0/${mediaId}?fields=status_code&access_token=${accessToken}`);
+        const response = await fetch(`https://graph.facebook.com/v18.0/${mediaId}?fields=status_code,status&access_token=${accessToken}`);
         const result = await response.json();
 
-        if (result.status_code === 'FINISHED') {
-          console.log('✅ Media processing completed');
-          return;
-        } else if (result.status_code === 'ERROR') {
-          throw new Error('Media processing failed');
+        const statusCode = result.status_code || result.status;
+
+        switch (statusCode) {
+          case 'FINISHED':
+            console.log('✅ Media processing completed - Ready to publish');
+            return;
+          
+          case 'ERROR':
+            const errorMsg = result.error?.message || 'Media processing failed';
+            console.error('❌ Media processing error:', errorMsg);
+            throw new Error(`Media processing failed: ${errorMsg}`);
+          
+          case 'EXPIRED':
+            console.error('⏰ Media container expired (>24 hours)');
+            throw new Error('Media container expired. Please try uploading again.');
+          
+          case 'IN_PROGRESS':
+            console.log(`⏳ Media processing in progress... (${attempt + 1}/${maxAttempts}) - ${(attempt * 2)}s elapsed`);
+            break;
+          
+          default:
+            console.log(`⏳ Waiting for media status... Current: ${statusCode} (${attempt + 1}/${maxAttempts})`);
         }
 
-        console.log(`⏳ Media processing... (${attempt + 1}/${maxAttempts})`);
         await new Promise(resolve => setTimeout(resolve, delay));
-      } catch (error) {
-        console.error('Error checking media status:', error);
+      } catch (error: any) {
+        if (error.message.includes('expired') || error.message.includes('failed')) {
+          throw error; // Re-throw processing errors
+        }
+        console.error('⚠️ Error checking media status:', error.message);
+        // Continue checking on network errors
+        if (attempt < maxAttempts - 1) {
+          await new Promise(resolve => setTimeout(resolve, delay));
+          continue;
+        }
         break;
       }
     }
+
+    // If we exit the loop without FINISHED status
+    console.warn('⚠️ Media processing timeout - Attempting to publish anyway');
   }
 
   /**

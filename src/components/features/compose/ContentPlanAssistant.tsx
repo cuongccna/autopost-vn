@@ -378,7 +378,7 @@ export default function ContentPlanAssistant({ composeData, onApplySlot, showToa
               <section className="space-y-2">
                 <label className="block text-sm font-medium text-gray-700">Chọn nền tảng</label>
                 <div className="flex flex-wrap gap-2">
-                  {['facebook', 'instagram', 'zalo', 'tiktok'].map(platform => (
+                  {['facebook', 'instagram', 'zalo'].map(platform => (
                     <button
                       key={platform}
                       type="button"
