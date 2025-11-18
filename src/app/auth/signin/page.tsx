@@ -1,8 +1,8 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { signIn } from 'next-auth/react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { AuthLayout, InputField, Button, Alert } from '@/components/auth/AuthComponents'
 
@@ -12,6 +12,15 @@ export default function SignIn() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const router = useRouter()
+  const searchParams = useSearchParams()
+
+  // Check for error in URL params
+  useEffect(() => {
+    const urlError = searchParams.get('error')
+    if (urlError === 'CredentialsSignin') {
+      setError('Email hoặc mật khẩu không đúng. Vui lòng thử lại.')
+    }
+  }, [searchParams])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -24,20 +33,27 @@ export default function SignIn() {
         email,
         password,
         callbackUrl: '/app',
-        redirect: true  // Let NextAuth handle redirect
+        redirect: false  // Don't redirect, handle manually to show errors
       })
 
       console.log('🔐 SIGNIN: Result:', result)
       
-      // This code won't run if redirect: true
       if (result?.error) {
         console.error('🔐 SIGNIN: Error -', result.error)
-        setError('Email hoặc mật khẩu không đúng')
+        // Try to parse error message from authorize()
+        if (result.error === 'CredentialsSignin') {
+          setError('Email hoặc mật khẩu không đúng. Vui lòng thử lại.')
+        } else {
+          setError(result.error)
+        }
         setLoading(false)
+      } else if (result?.ok) {
+        console.log('🔐 SIGNIN: Success! Redirecting...')
+        router.push(result.url || '/app')
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('🔐 SIGNIN: Exception -', error)
-      setError('Có lỗi xảy ra, vui lòng thử lại')
+      setError(error.message || 'Có lỗi xảy ra, vui lòng thử lại')
       setLoading(false)
     }
   }

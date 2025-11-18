@@ -28,7 +28,7 @@ export const authOptions: NextAuthOptions = {
 
           if (result.rows.length === 0) {
             console.log('❌ AUTH: User not found:', credentials.email)
-            return null
+            throw new Error('Tài khoản không tồn tại. Vui lòng đăng ký hoặc kiểm tra lại email.')
           }
 
           const user = result.rows[0]
@@ -37,7 +37,7 @@ export const authOptions: NextAuthOptions = {
           // Verify password
           if (!user.password_hash) {
             console.log('❌ AUTH: No password hash found for user:', user.id)
-            return null
+            throw new Error('Tài khoản chưa được thiết lập mật khẩu. Vui lòng liên hệ admin.')
           }
 
           console.log('🔐 AUTH: Password hash exists, length:', user.password_hash.length)
@@ -48,7 +48,7 @@ export const authOptions: NextAuthOptions = {
           
           if (!passwordValid) {
             console.log('❌ AUTH: Invalid password for user:', user.email)
-            return null
+            throw new Error('Mật khẩu không đúng. Vui lòng thử lại.')
           }
           
           console.log('✅ AUTH: Password verified successfully!')

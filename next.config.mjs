@@ -17,12 +17,6 @@ const nextConfig = {
   },
   poweredByHeader: false,
   compress: true,
-  // Increase body size limit for file uploads (100MB)
-  api: {
-    bodyParser: {
-      sizeLimit: '100mb',
-    },
-  },
   images: {
     domains: ['autopostvn.cloud', 'localhost'],
     formats: ['image/webp', 'image/avif'],
