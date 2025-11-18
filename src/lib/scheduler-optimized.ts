@@ -464,10 +464,27 @@ async function processJob(
     // Publishing
     console.log(`📤 [OPTIMIZED SCHEDULER] Publishing to ${socialAccount.provider}: ${socialAccount.name}`);
     
+    // Detect media type from URLs if not set in database
+    let mediaType = post.media_type || 'none';
+    if ((mediaType === 'none' || !mediaType) && post.media_urls && post.media_urls.length > 0) {
+      // Auto-detect from first media URL
+      const firstUrl = post.media_urls[0].toLowerCase();
+      if (firstUrl.match(/\.(mp4|mov|avi|wmv|flv|webm|mkv)$/)) {
+        mediaType = 'video';
+        console.log('🎥 Auto-detected media type: video');
+      } else if (firstUrl.match(/\.(jpg|jpeg|png|gif|webp|heif|tiff)$/)) {
+        mediaType = 'image';
+        console.log('📷 Auto-detected media type: image');
+      } else if (post.media_urls.length > 1) {
+        mediaType = 'album';
+        console.log('📁 Auto-detected media type: album (multiple files)');
+      }
+    }
+    
     const publishData: PublishData = {
       content: post.content,
       mediaUrls: post.media_urls || [],
-      mediaType: post.media_type || 'none',
+      mediaType: mediaType as 'image' | 'video' | 'album' | 'none',
       metadata: post.metadata || {}
     };
 
