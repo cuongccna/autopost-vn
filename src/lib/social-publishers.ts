@@ -528,10 +528,10 @@ export class InstagramPublisher extends BaseSocialPublisher {
 
       console.log('✅ Media container created:', mediaResult.id);
 
-      // Step 2: Wait for media processing (for videos)
-      if (isVideo) {
-        await this.waitForMediaProcessing(mediaResult.id, accessToken);
-      }
+      // Step 2: Wait for media processing (ALWAYS check status, not just for videos)
+      // Instagram may process images too, especially large ones
+      console.log('🔍 Checking media container status before publishing...');
+      await this.waitForMediaProcessing(mediaResult.id, accessToken);
 
       // Step 3: Publish the media
       const publishResponse = await fetch(`https://graph.facebook.com/v18.0/${accountId}/media_publish`, {
@@ -661,7 +661,11 @@ export class InstagramPublisher extends BaseSocialPublisher {
 
       console.log('🎠 Carousel container created:', carouselResult.id);
 
-      // Step 3: Publish the carousel
+      // Step 3: Wait for carousel processing
+      console.log('🔍 Checking carousel container status before publishing...');
+      await this.waitForMediaProcessing(carouselResult.id, accessToken);
+
+      // Step 4: Publish the carousel
       const publishResponse = await fetch(`https://graph.facebook.com/v18.0/${accountId}/media_publish`, {
         method: 'POST',
         headers: {
@@ -714,7 +718,7 @@ export class InstagramPublisher extends BaseSocialPublisher {
    * Status codes: FINISHED, IN_PROGRESS, ERROR, EXPIRED
    */
   private async waitForMediaProcessing(mediaId: string, accessToken: string): Promise<void> {
-    const maxAttempts = 30; // Increased for large videos (up to 60 seconds)
+    const maxAttempts = 60; // Increased to 120 seconds (2 minutes) for large videos/images
     const delay = 2000; // 2 seconds per attempt
 
     console.log(`🔍 Checking media container status: ${mediaId}`);
@@ -763,8 +767,9 @@ export class InstagramPublisher extends BaseSocialPublisher {
       }
     }
 
-    // If we exit the loop without FINISHED status
-    console.warn('⚠️ Media processing timeout - Attempting to publish anyway');
+    // If we exit the loop without FINISHED status, throw error instead of continuing
+    console.error('❌ Media processing timeout after 120 seconds');
+    throw new Error('Media processing timeout. Instagram may be experiencing delays. Please try again later.');
   }
 
   /**
@@ -800,7 +805,11 @@ export class InstagramPublisher extends BaseSocialPublisher {
           }
           return error_user_msg || error_user_title || 'Lỗi xử lý media từ Instagram.';
         case 9007:
-          return 'Tài khoản Instagram không có quyền đăng bài. Cần chuyển sang Business/Creator account.';
+          // Media processing errors
+          if (error_subcode === 2207027) {
+            return 'Media chưa sẵn sàng để đăng. Hệ thống sẽ tự động thử lại sau ít phút. Lỗi này thường do video/ảnh đang được Instagram xử lý.';
+          }
+          return error_user_msg || 'Tài khoản Instagram không có quyền đăng bài. Cần chuyển sang Business/Creator account.';
         case 9004:
           return 'Nội dung hoặc hình ảnh vi phạm chính sách của Instagram.';
         case 36000:
