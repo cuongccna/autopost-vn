@@ -475,28 +475,49 @@ export class InstagramPublisher extends BaseSocialPublisher {
     try {
       console.log('📷 Publishing single media to Instagram...');
 
+      // Validate media URL
+      const mediaUrl = data.mediaUrls[0];
+      if (!mediaUrl || !mediaUrl.startsWith('http')) {
+        return {
+          success: false,
+          error: 'Invalid media URL. URL must be publicly accessible and start with http/https.'
+        };
+      }
+
+      // Detect if it's a video (basic check)
+      const isVideo = this.isVideoUrl(mediaUrl);
+
+      console.log('🔍 Media validation:', {
+        url: mediaUrl,
+        isVideo,
+        isPublic: mediaUrl.startsWith('http'),
+        urlLength: mediaUrl.length
+      });
+
       // Step 1: Create media container
       const mediaData: any = {
-        image_url: data.mediaUrls[0],
+        image_url: mediaUrl,
         caption: data.content,
         access_token: accessToken
       };
 
-      // Detect if it's a video (basic check)
-      const isVideo = this.isVideoUrl(data.mediaUrls[0]);
       if (isVideo) {
         // ✅ Instagram now requires REELS for video content (2024+ API change)
         // VIDEO media_type has been deprecated and no longer supported
         mediaData.media_type = 'REELS';
         delete mediaData.image_url;
-        mediaData.video_url = data.mediaUrls[0];
+        mediaData.video_url = mediaUrl;
         // Optional: share to main feed as well as Reels tab
         mediaData.share_to_feed = true;
         
         console.log('🎬 Preparing REELS container:', {
-          video_url: data.mediaUrls[0],
+          video_url: mediaUrl,
           media_type: 'REELS',
           share_to_feed: true
+        });
+      } else {
+        console.log('🖼️ Preparing IMAGE container:', {
+          image_url: mediaUrl
         });
       }
 
@@ -728,6 +749,9 @@ export class InstagramPublisher extends BaseSocialPublisher {
         const response = await fetch(`https://graph.facebook.com/v18.0/${mediaId}?fields=status_code,status&access_token=${accessToken}`);
         const result = await response.json();
 
+        // Log full response for debugging
+        console.log(`📊 Container status response:`, JSON.stringify(result, null, 2));
+
         const statusCode = result.status_code || result.status;
 
         switch (statusCode) {
@@ -736,9 +760,23 @@ export class InstagramPublisher extends BaseSocialPublisher {
             return;
           
           case 'ERROR':
-            const errorMsg = result.error?.message || 'Media processing failed';
-            console.error('❌ Media processing error:', errorMsg);
-            throw new Error(`Media processing failed: ${errorMsg}`);
+            // Get detailed error information
+            const errorMsg = result.error?.message 
+              || result.error_message 
+              || result.message 
+              || 'Media processing failed - Unknown error';
+            const errorCode = result.error?.code || result.error_code;
+            const errorSubcode = result.error?.error_subcode || result.error_subcode;
+            
+            console.error('❌ Media processing error:', {
+              message: errorMsg,
+              code: errorCode,
+              subcode: errorSubcode,
+              fullResponse: result
+            });
+            
+            // Return more helpful error message
+            throw new Error(`Instagram media processing failed: ${errorMsg}${errorCode ? ` (Code: ${errorCode})` : ''}`);
           
           case 'EXPIRED':
             console.error('⏰ Media container expired (>24 hours)');
