@@ -466,19 +466,28 @@ async function processJob(
     
     // Detect media type from URLs if not set in database
     let mediaType = post.media_type || 'none';
+    console.log(`🔍 [MEDIA TYPE DEBUG] Original mediaType from DB: "${mediaType}", media_urls:`, post.media_urls);
+    
     if ((mediaType === 'none' || !mediaType) && post.media_urls && post.media_urls.length > 0) {
-      // Auto-detect from first media URL
-      const firstUrl = post.media_urls[0].toLowerCase();
-      if (firstUrl.match(/\.(mp4|mov|avi|wmv|flv|webm|mkv)$/)) {
+      // Auto-detect from first media URL - extract filename from URL path (ignore query params)
+      const firstUrl = post.media_urls[0];
+      const urlPath = firstUrl.split('?')[0].split('#')[0].toLowerCase(); // Remove query params and hash
+      console.log(`🔍 [MEDIA TYPE DEBUG] Analyzing URL path: "${urlPath}"`);
+      
+      if (urlPath.match(/\.(mp4|mov|avi|wmv|flv|webm|mkv)$/)) {
         mediaType = 'video';
-        console.log('🎥 Auto-detected media type: video');
-      } else if (firstUrl.match(/\.(jpg|jpeg|png|gif|webp|heif|tiff)$/)) {
+        console.log(`🎥 [MEDIA TYPE] Auto-detected VIDEO from URL: ${firstUrl}`);
+      } else if (urlPath.match(/\.(jpg|jpeg|png|gif|webp|heif|tiff)$/)) {
         mediaType = 'image';
-        console.log('📷 Auto-detected media type: image');
+        console.log(`📷 [MEDIA TYPE] Auto-detected IMAGE from URL: ${firstUrl}`);
       } else if (post.media_urls.length > 1) {
         mediaType = 'album';
-        console.log('📁 Auto-detected media type: album (multiple files)');
+        console.log(`📁 [MEDIA TYPE] Auto-detected ALBUM (${post.media_urls.length} files)`);
+      } else {
+        console.log(`⚠️ [MEDIA TYPE] Could not detect type from URL: ${firstUrl}`);
       }
+    } else {
+      console.log(`ℹ️ [MEDIA TYPE] Using existing mediaType: "${mediaType}"`);
     }
     
     const publishData: PublishData = {
