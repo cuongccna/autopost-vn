@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, Suspense } from 'react'
 import { signIn } from 'next-auth/react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
@@ -9,7 +9,7 @@ import { AuthLayout, InputField, Button, Alert } from '@/components/auth/AuthCom
 // Prevent static generation since we use useSearchParams
 export const dynamic = 'force-dynamic'
 
-export default function SignIn() {
+function SignInForm() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
@@ -148,5 +148,25 @@ export default function SignIn() {
         </div>
       </div>
     </AuthLayout>
+  )
+}
+
+// Wrap in Suspense to prevent prerender error with useSearchParams
+export default function SignIn() {
+  return (
+    <Suspense fallback={
+      <AuthLayout
+        title="Đăng nhập"
+        subtitle="Đang tải..."
+      >
+        <div className="animate-pulse space-y-6">
+          <div className="h-10 bg-gray-200 rounded" />
+          <div className="h-10 bg-gray-200 rounded" />
+          <div className="h-10 bg-gray-200 rounded" />
+        </div>
+      </AuthLayout>
+    }>
+      <SignInForm />
+    </Suspense>
   )
 }
