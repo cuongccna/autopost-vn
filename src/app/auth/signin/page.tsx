@@ -6,6 +6,9 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { AuthLayout, InputField, Button, Alert } from '@/components/auth/AuthComponents'
 
+// Prevent static generation since we use useSearchParams
+export const dynamic = 'force-dynamic'
+
 export default function SignIn() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
