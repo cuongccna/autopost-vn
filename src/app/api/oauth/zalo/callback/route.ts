@@ -135,13 +135,14 @@ async function exchangeCodeForToken(code: string) {
 }
 
 async function getAccountInfo(accessToken: string) {
-
-  
-  const response = await fetch(
-    `https://openapi.zalo.me/v2.0/oa/getinfo?access_token=${accessToken}`
-  );
-
-
+  // Zalo OA API v2.0 - Get OA profile
+  // Docs: https://developers.zalo.me/docs/official-account/api/thong-tin-official-account/lay-thong-tin-official-account-post-4227
+  const response = await fetch('https://openapi.zalo.me/v2.0/oa/getoa', {
+    method: 'GET',
+    headers: {
+      'access_token': accessToken,
+    },
+  });
 
   if (!response.ok) {
     const errorText = await response.text();
