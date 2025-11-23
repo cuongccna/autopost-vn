@@ -909,12 +909,24 @@ export class ZaloPublisher extends BaseSocialPublisher {
         console.log('⚠️ Zalo scheduled posting not fully supported, publishing immediately');
       }
 
+      // Generate appsecret_proof for Zalo API security
+      const crypto = require('crypto');
+      const appSecret = process.env.ZALO_APP_SECRET;
+      if (!appSecret) {
+        throw new Error('ZALO_APP_SECRET not configured');
+      }
+      const appsecretProof = crypto
+        .createHmac('sha256', appSecret)
+        .update(accessToken)
+        .digest('hex');
+
       // Send message via Zalo OA API
       const response = await fetch(`https://openapi.zalo.me/v3.0/oa/message/cs`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'access_token': accessToken
+          'access_token': accessToken,
+          'appsecret_proof': appsecretProof
         },
         body: JSON.stringify(messageData)
       });

@@ -122,9 +122,31 @@ YÊU CẦU ĐẦU RA:
   • Tất cả nội dung bằng tiếng Việt, phù hợp văn hóa Việt Nam.
   • Khuyến nghị thời gian đăng dựa trên thói quen người dùng Việt Nam.
   • Không trùng lặp nội dung với danh sách bài đã đăng (nếu bắt buộc dùng ý tưởng tương tự, hãy ghi chú trong duplicateOf).
-  • Đảm bảo kế hoạch đạt cadence ${cadencePerWeek} bài mỗi tuần trong khoảng thời gian.
+  • **QUAN TRỌNG**: Đảm bảo kế hoạch đạt cadence ${cadencePerWeek} bài mỗi tuần.
+  • **QUAN TRỌNG**: Phân bổ các bài đăng ĐỀU ra các ngày khác nhau trong khoảng thời gian từ ${startDate} đến ${endDate}.
+  • **QUAN TRỌNG**: KHÔNG tạo tất cả các bài cho cùng 1 ngày. Mỗi ngày trong "plan" array PHẢI có "date" khác nhau.
+  • **QUAN TRỌNG**: Nếu cadence là 3 bài/tuần và khoảng thời gian là 7 ngày, hãy tạo kế hoạch như sau:
+    - Thứ 2 (${startDate}): 1 bài
+    - Thứ 4: 1 bài  
+    - Thứ 6: 1 bài
   • Kết hợp các CTA đa dạng, tránh lặp từ.
   • Luôn đề xuất ít nhất một gợi ý hashtag cho mỗi slot.
+  
+**VÍ DỤ KẾT QUẢ ĐÚNG** (cadence 3 bài/tuần, 7 ngày):
+{
+  "plan": [
+    { "date": "2025-11-24", "slots": [...] },
+    { "date": "2025-11-26", "slots": [...] },
+    { "date": "2025-11-28", "slots": [...] }
+  ]
+}
+
+**SAI**: Không được tạo tất cả bài cho cùng 1 ngày như:
+{
+  "plan": [
+    { "date": "2025-11-24", "slots": [slot1, slot2, slot3] }
+  ]
+}
 `;
 }
 
