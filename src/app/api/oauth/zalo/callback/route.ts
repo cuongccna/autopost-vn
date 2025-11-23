@@ -50,12 +50,14 @@ export async function GET(request: NextRequest) {
       // Exchange code for access token
       const tokenData = await exchangeCodeForToken(code);
 
-      
-      // Get OA information
-      const accountInfo = await getAccountInfo(tokenData.access_token);
+      // For Zalo OA, we use the OA ID from state or a default one
+      // The OA ID is: 1862014164765694405
+      const oaId = stateData.oa_id || '1862014164765694405';
+      const oaName = stateData.oa_name || 'AutoPostVN';
 
+      console.log('🔍 Zalo Callback - Using OA:', { oaId, oaName });
       
-      // Save to database
+      // Save to database (no need to call getoa API which requires MAC signature)
       const savedAccount = await userManagementService.saveOAuthAccount(
         session.user.email,
         'zalo',
@@ -63,7 +65,10 @@ export async function GET(request: NextRequest) {
           access_token: tokenData.access_token,
           refresh_token: tokenData.refresh_token,
           expires_in: tokenData.expires_in,
-          account_info: accountInfo,
+          account_info: {
+            oa_id: oaId,
+            name: oaName,
+          },
         }
       );
 
