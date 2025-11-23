@@ -66,8 +66,9 @@ export async function GET(request: NextRequest) {
           refresh_token: tokenData.refresh_token,
           expires_in: tokenData.expires_in,
           account_info: {
-            oa_id: oaId,
+            providerId: oaId,  // Required by saveOAuthAccount
             name: oaName,
+            oa_id: oaId,       // Keep for reference
           },
         }
       );
