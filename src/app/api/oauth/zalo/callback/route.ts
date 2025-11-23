@@ -91,9 +91,10 @@ async function exchangeCodeForToken(code: string) {
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
   const redirectUri = `${baseUrl}/api/oauth/zalo/callback`;
   
+  // Zalo OA API requires 'secret_key' not 'app_secret'
   const params = new URLSearchParams({
     app_id: process.env.ZALO_APP_ID!,
-    app_secret: process.env.ZALO_APP_SECRET!,
+    secret_key: process.env.ZALO_APP_SECRET!,
     code,
     grant_type: 'authorization_code',
   });
