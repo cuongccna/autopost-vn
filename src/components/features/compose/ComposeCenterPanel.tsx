@@ -107,20 +107,30 @@ export default function ComposeCenterPanel({
   const handleImagesChange = (media: UploadedMedia[]) => {
     console.log('🖼️ [MEDIA CHANGE] Received media:', media.length, media);
     
-    // Check for mixed media types (video + images)
+    // Check for mixed media types (video + images) - Facebook does NOT allow this
     const hasVideo = media.some(m => m.mediaType === 'video');
     const hasImage = media.some(m => m.mediaType === 'image');
     
     if (hasVideo && hasImage) {
       showToast?.({
-        title: 'Lỗi upload',
-        message: 'Facebook không hỗ trợ đăng video và hình ảnh cùng lúc. Vui lòng chọn chỉ video HOẶC hình ảnh.',
-        type: 'error'
+        title: 'Không thể kết hợp',
+        message: '⚠️ Facebook/Instagram không hỗ trợ đăng video và ảnh cùng lúc. Vui lòng chọn HOẶC video HOẶC ảnh (có thể nhiều ảnh).',
+        type: 'warning'
       });
-      // Remove the last uploaded file (the one causing the conflict)
-      const filteredMedia = media.slice(0, -1);
-      setUploadedMedia(filteredMedia);
-      console.log('🖼️ [MEDIA CHANGE] Filtered media (removed last):', filteredMedia);
+      // Block the upload - don't update state
+      return;
+    }
+    
+    // Facebook allows only 1 video per post
+    if (hasVideo && media.filter(m => m.mediaType === 'video').length > 1) {
+      showToast?.({
+        title: 'Giới hạn video',
+        message: '⚠️ Facebook chỉ cho phép 1 video mỗi bài đăng.',
+        type: 'warning'
+      });
+      // Keep only the first video
+      const firstVideo = media.find(m => m.mediaType === 'video');
+      setUploadedMedia(firstVideo ? [firstVideo] : []);
       return;
     }
     

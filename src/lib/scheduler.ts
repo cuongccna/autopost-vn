@@ -177,10 +177,35 @@ export async function runScheduler(limit = 10): Promise<ProcessingResult> {
         // Bước 3: Publishing
         console.log(`📤 [SCHEDULER] Publishing to ${socialAccount.provider}: ${socialAccount.name}`);
         
+        // Auto-detect media type from URLs if not set in database
+        let mediaType = validation.data!.post.media_type || 'none';
+        console.log(`🔍 [MEDIA TYPE DEBUG] Original mediaType from DB: "${mediaType}", media_urls:`, validation.data!.post.media_urls);
+        
+        if ((mediaType === 'none' || !mediaType) && validation.data!.post.media_urls && validation.data!.post.media_urls.length > 0) {
+          const firstUrl = validation.data!.post.media_urls[0];
+          const urlPath = firstUrl.split('?')[0].split('#')[0].toLowerCase();
+          console.log(`🔍 [MEDIA TYPE DEBUG] Analyzing URL path: "${urlPath}"`);
+          
+          if (urlPath.match(/\.(mp4|mov|avi|wmv|flv|webm|mkv)$/)) {
+            mediaType = 'video';
+            console.log(`🎥 [MEDIA TYPE] Auto-detected VIDEO from URL: ${firstUrl}`);
+          } else if (urlPath.match(/\.(jpg|jpeg|png|gif|webp|heif|tiff)$/)) {
+            mediaType = 'image';
+            console.log(`📷 [MEDIA TYPE] Auto-detected IMAGE from URL: ${firstUrl}`);
+          } else if (validation.data!.post.media_urls.length > 1) {
+            mediaType = 'album';
+            console.log(`📁 [MEDIA TYPE] Auto-detected ALBUM (${validation.data!.post.media_urls.length} files)`);
+          } else {
+            console.log(`⚠️ [MEDIA TYPE] Could not detect type from URL: ${firstUrl}`);
+          }
+        } else {
+          console.log(`ℹ️ [MEDIA TYPE] Using existing mediaType: "${mediaType}"`);
+        }
+        
         const publishData: PublishData = {
           content: validation.data!.post.content,
           mediaUrls: validation.data!.post.media_urls || [],
-          mediaType: validation.data!.post.media_type || 'none',
+          mediaType: mediaType as 'image' | 'video' | 'album' | 'none',
           metadata: validation.data!.post.metadata || {}
         };
 
