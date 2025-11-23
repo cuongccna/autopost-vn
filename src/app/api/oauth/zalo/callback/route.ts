@@ -99,7 +99,12 @@ async function exchangeCodeForToken(code: string) {
     grant_type: 'authorization_code',
   });
 
-
+  console.log('🔍 Zalo Token Exchange - Request params:', {
+    app_id: process.env.ZALO_APP_ID,
+    secret_key: process.env.ZALO_APP_SECRET?.substring(0, 5) + '***',
+    code: code.substring(0, 10) + '...',
+    grant_type: 'authorization_code',
+  });
 
   const response = await fetch('https://oauth.zaloapp.com/v4/oa/access_token', {
     method: 'POST',
