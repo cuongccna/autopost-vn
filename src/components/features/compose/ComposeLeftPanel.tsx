@@ -147,7 +147,7 @@ const videoTemplates = [
 const platforms = [
   { key: 'facebook', label: 'Facebook Page', icon: '📘', available: true },
   { key: 'instagram', label: 'Instagram', icon: '📷', available: true },
-  { key: 'zalo', label: 'Zalo OA', icon: '💬', available: true }
+  { key: 'zalo', label: 'Zalo OA (Cần gói trả phí)', icon: '💬', available: false } // ⚠️ Zalo cần nâng cấp OA
 ];
 
 const ratios = [

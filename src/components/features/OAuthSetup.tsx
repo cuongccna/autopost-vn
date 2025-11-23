@@ -90,10 +90,11 @@ export default function OAuthSetup({ provider, onSuccess, onError }: OAuthSetupP
           'Phải có Zalo Official Account được phê duyệt',
           'OA phải ở trạng thái hoạt động',
           'Có quyền quản lý OA',
+          '⚠️ YÊU CẦU: OA phải nâng cấp lên GÓI TRẢ PHÍ để sử dụng API đăng bài (xem chi tiết: https://zalo.cloud/oa/pricing)',
         ],
         permissions: [
           'Gửi tin nhắn tới followers',
-          'Đăng bài lên timeline OA',
+          'Đăng bài lên timeline OA (Chỉ gói trả phí)',
           'Đọc thông tin tương tác',
         ],
       },
@@ -117,6 +118,28 @@ export default function OAuthSetup({ provider, onSuccess, onError }: OAuthSetupP
         <p className="text-gray-600 text-sm">
           {providerInfo.description}
         </p>
+        {provider === 'zalo' && (
+          <div className="mt-3 bg-amber-50 border border-amber-200 rounded-lg p-3">
+            <div className="flex items-start gap-2">
+              <span className="text-amber-600 text-lg">⚠️</span>
+              <div className="text-left text-sm">
+                <p className="font-semibold text-amber-900 mb-1">Yêu cầu gói trả phí</p>
+                <p className="text-amber-800">
+                  Zalo OA cần nâng cấp lên{' '}
+                  <a 
+                    href="https://zalo.cloud/oa/pricing" 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="underline hover:text-amber-900 font-medium"
+                  >
+                    gói trả phí
+                  </a>
+                  {' '}để sử dụng API đăng bài tự động. Bạn vẫn có thể kết nối ngay để chuẩn bị sẵn tài khoản.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {setupStep === 'guide' && (

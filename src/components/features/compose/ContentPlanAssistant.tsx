@@ -378,21 +378,29 @@ export default function ContentPlanAssistant({ composeData, onApplySlot, showToa
               <section className="space-y-2">
                 <label className="block text-sm font-medium text-gray-700">Chọn nền tảng</label>
                 <div className="flex flex-wrap gap-2">
-                  {['facebook', 'instagram', 'zalo'].map(platform => (
-                    <button
-                      key={platform}
-                      type="button"
-                      onClick={() => togglePlatform(platform)}
-                      className={`px-3 py-2 text-sm rounded-md border transition-colors ${
-                        formState.selectedPlatforms.includes(platform)
-                          ? 'border-blue-500 bg-blue-50 text-blue-700'
-                          : 'border-gray-300 text-gray-600 hover:bg-gray-100'
-                      }`}
-                    >
-                      {platform.toUpperCase()}
-                    </button>
-                  ))}
+                  {['facebook', 'instagram', 'zalo'].map(platform => {
+                    const isZalo = platform === 'zalo';
+                    return (
+                      <button
+                        key={platform}
+                        type="button"
+                        onClick={() => togglePlatform(platform)}
+                        className={`px-3 py-2 text-sm rounded-md border transition-colors ${
+                          formState.selectedPlatforms.includes(platform)
+                            ? 'border-blue-500 bg-blue-50 text-blue-700'
+                            : 'border-gray-300 text-gray-600 hover:bg-gray-100'
+                        }`}
+                        title={isZalo ? 'Zalo OA cần nâng cấp lên gói trả phí để sử dụng API đăng bài' : ''}
+                      >
+                        {platform.toUpperCase()}
+                        {isZalo && ' ⚠️'}
+                      </button>
+                    );
+                  })}
                 </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  💡 Zalo OA cần <a href="https://zalo.cloud/oa/pricing" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">nâng cấp gói trả phí</a> để đăng bài qua API
+                </p>
               </section>
 
               <section>

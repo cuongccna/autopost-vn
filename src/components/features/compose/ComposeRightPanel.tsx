@@ -308,11 +308,17 @@ export default function ComposeRightPanel({
                 className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
               />
               <div className="flex-1">
-                <div className="font-medium text-gray-900">
+                <div className="font-medium text-gray-900 flex items-center gap-2">
                   {provider.label}
+                  {key === 'zalo' && (
+                    <span className="text-xs text-amber-600" title="Yêu cầu gói trả phí">⚠️</span>
+                  )}
                 </div>
                 <div className="text-sm text-gray-500">
                   Đăng lên {provider.label}
+                  {key === 'zalo' && (
+                    <span className="text-amber-700"> (Yêu cầu gói trả phí)</span>
+                  )}
                 </div>
               </div>
               <div className="text-2xl">
