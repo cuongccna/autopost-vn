@@ -91,20 +91,20 @@ async function exchangeCodeForToken(code: string) {
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
   const redirectUri = `${baseUrl}/api/oauth/zalo/callback`;
   
-  // Zalo OA API - Try sending secret_key in header instead of body
+  // According to Zalo Official Docs, need both body params AND header
   const params = new URLSearchParams({
     app_id: process.env.ZALO_APP_ID!,
     code,
     grant_type: 'authorization_code',
   });
 
-  console.log('🔍 Zalo Token Exchange - Attempt with secret_key in header');
-  console.log('Request params:', {
+  console.log('🔍 Zalo Token Exchange - Request:');
+  console.log('  Body params:', {
     app_id: process.env.ZALO_APP_ID,
-    code: code.substring(0, 10) + '...',
+    code: code.substring(0, 15) + '...',
     grant_type: 'authorization_code',
   });
-  console.log('Header secret_key:', process.env.ZALO_APP_SECRET?.substring(0, 5) + '***');
+  console.log('  Header secret_key:', process.env.ZALO_APP_SECRET?.substring(0, 8) + '***');
 
   const response = await fetch('https://oauth.zaloapp.com/v4/oa/access_token', {
     method: 'POST',
