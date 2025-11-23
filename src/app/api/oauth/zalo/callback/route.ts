@@ -115,6 +115,12 @@ async function exchangeCodeForToken(code: string) {
   }
 
   const tokenData = await response.json();
+  console.log('🔍 Zalo Token Response:', JSON.stringify(tokenData, null, 2));
+
+  // Zalo returns: { access_token, refresh_token, expires_in }
+  if (!tokenData.access_token) {
+    throw new Error('No access token in Zalo response');
+  }
 
   return tokenData;
 }
@@ -135,11 +141,22 @@ async function getAccountInfo(accessToken: string) {
   }
 
   const data = await response.json();
-
   
+  console.log('🔍 Zalo Account Info Response:', JSON.stringify(data, null, 2));
+  
+  // Zalo API returns: { error: 0, message: "Success", data: { oa_id: "...", name: "...", ... } }
+  if (data.error !== 0) {
+    throw new Error(`Zalo API error: ${data.message || 'Unknown error'}`);
+  }
+  
+  if (!data.data?.oa_id) {
+    console.error('🔍 Zalo Account Info - Missing oa_id:', data);
+    throw new Error('Missing OA ID in Zalo response');
+  }
+
   return {
-    name: data.data?.name || 'Zalo OA',
-    providerId: data.data?.oa_id,
+    name: data.data.name || 'Zalo OA',
+    providerId: String(data.data.oa_id),
     category: 'official_account',
   };
 }
