@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { X, Search, Grid3x3, List, Image as ImageIcon, Video, Calendar, Tag, Download, Loader2 } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { X, Search, Grid3x3, List, Image as ImageIcon, Video, Calendar, Tag, Download, Loader2, Trash2, Play, Eye, AlertTriangle } from 'lucide-react';
 
 interface MediaItem {
   id: string;
@@ -41,6 +41,12 @@ export default function MediaLibraryPicker({
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [selectedMedia, setSelectedMedia] = useState<MediaItem[]>([]);
+  
+  // Preview & Delete states
+  const [previewItem, setPreviewItem] = useState<MediaItem | null>(null);
+  const [deleteItem, setDeleteItem] = useState<MediaItem | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -109,6 +115,43 @@ export default function MediaLibraryPicker({
       month: '2-digit',
       year: 'numeric',
     });
+  };
+
+  // Handle delete media
+  const handleDeleteMedia = async (item: MediaItem) => {
+    setDeleting(true);
+    try {
+      const response = await fetch(`/api/media?id=${item.id}&permanent=true`, {
+        method: 'DELETE',
+      });
+      
+      if (response.ok) {
+        // Remove from local state
+        setMedia(prev => prev.filter(m => m.id !== item.id));
+        setSelectedMedia(prev => prev.filter(m => m.id !== item.id));
+        setDeleteItem(null);
+      } else {
+        const data = await response.json();
+        alert(data.error || 'Không thể xóa media');
+      }
+    } catch (error) {
+      console.error('Delete error:', error);
+      alert('Lỗi khi xóa media');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  // Handle preview
+  const handlePreview = (item: MediaItem, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setPreviewItem(item);
+  };
+
+  // Handle delete button click
+  const handleDeleteClick = (item: MediaItem, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setDeleteItem(item);
   };
 
   if (!isOpen) return null;
@@ -212,8 +255,17 @@ export default function MediaLibraryPicker({
                             className="w-full h-full object-cover"
                           />
                         ) : (
-                          <div className="w-full h-full flex items-center justify-center bg-gray-900">
-                            <Video className="w-12 h-12 text-white opacity-50" />
+                          <div className="w-full h-full relative bg-gray-900">
+                            {/* Video thumbnail with play icon */}
+                            <video
+                              src={item.public_url}
+                              className="w-full h-full object-cover"
+                              muted
+                              preload="metadata"
+                            />
+                            <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+                              <Play className="w-12 h-12 text-white opacity-80" fill="white" />
+                            </div>
                           </div>
                         )}
                         
@@ -229,6 +281,24 @@ export default function MediaLibraryPicker({
                           }`}>
                             {isSelected && <span className="text-white text-xs">✓</span>}
                           </div>
+                        </div>
+
+                        {/* Hover Actions */}
+                        <div className="absolute bottom-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button
+                            onClick={(e) => handlePreview(item, e)}
+                            className="p-1.5 bg-white rounded-lg shadow hover:bg-gray-100 transition-colors"
+                            title="Xem trước"
+                          >
+                            <Eye className="w-4 h-4 text-gray-700" />
+                          </button>
+                          <button
+                            onClick={(e) => handleDeleteClick(item, e)}
+                            className="p-1.5 bg-white rounded-lg shadow hover:bg-red-50 transition-colors"
+                            title="Xóa"
+                          >
+                            <Trash2 className="w-4 h-4 text-red-500" />
+                          </button>
                         </div>
                       </div>
 
@@ -248,37 +318,68 @@ export default function MediaLibraryPicker({
                   return (
                     <div
                       key={item.id}
-                      onClick={() => handleToggleSelect(item)}
                       className={`flex items-center gap-4 p-3 border-2 rounded-lg cursor-pointer transition-all ${
                         isSelected ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'
                       }`}
                     >
                       {/* Checkbox */}
-                      <div className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 ${
-                        isSelected ? 'bg-blue-500 border-blue-500' : 'bg-white border-gray-300'
-                      }`}>
+                      <div 
+                        onClick={() => handleToggleSelect(item)}
+                        className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 ${
+                          isSelected ? 'bg-blue-500 border-blue-500' : 'bg-white border-gray-300'
+                        }`}
+                      >
                         {isSelected && <span className="text-white text-xs">✓</span>}
                       </div>
 
                       {/* Thumbnail */}
-                      <div className="w-16 h-16 bg-gray-100 rounded overflow-hidden flex-shrink-0">
+                      <div 
+                        className="w-16 h-16 bg-gray-100 rounded overflow-hidden flex-shrink-0 relative group"
+                        onClick={() => handleToggleSelect(item)}
+                      >
                         {item.media_type === 'image' ? (
                           <img src={item.public_url} alt={item.file_name} className="w-full h-full object-cover" />
                         ) : (
-                          <div className="w-full h-full flex items-center justify-center bg-gray-900">
-                            <Video className="w-6 h-6 text-white opacity-50" />
+                          <div className="w-full h-full relative bg-gray-900">
+                            <video
+                              src={item.public_url}
+                              className="w-full h-full object-cover"
+                              muted
+                              preload="metadata"
+                            />
+                            <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+                              <Play className="w-6 h-6 text-white" fill="white" />
+                            </div>
                           </div>
                         )}
                       </div>
 
                       {/* Info */}
-                      <div className="flex-1 min-w-0">
+                      <div className="flex-1 min-w-0" onClick={() => handleToggleSelect(item)}>
                         <p className="font-medium text-gray-900 truncate">{item.file_name}</p>
                         <div className="flex items-center gap-4 text-xs text-gray-500 mt-1">
                           <span>{item.media_type === 'image' ? '🖼️ Ảnh' : '🎬 Video'}</span>
                           <span>{formatFileSize(item.file_size)}</span>
                           <span>{formatDate(item.created_at)}</span>
                         </div>
+                      </div>
+
+                      {/* Actions */}
+                      <div className="flex gap-2 flex-shrink-0">
+                        <button
+                          onClick={(e) => handlePreview(item, e)}
+                          className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                          title="Xem trước"
+                        >
+                          <Eye className="w-4 h-4 text-gray-600" />
+                        </button>
+                        <button
+                          onClick={(e) => handleDeleteClick(item, e)}
+                          className="p-2 hover:bg-red-50 rounded-lg transition-colors"
+                          title="Xóa"
+                        >
+                          <Trash2 className="w-4 h-4 text-red-500" />
+                        </button>
                       </div>
                     </div>
                   );
@@ -311,6 +412,130 @@ export default function MediaLibraryPicker({
           </div>
         </div>
       </div>
+
+      {/* Preview Modal */}
+      {previewItem && (
+        <div 
+          className="fixed inset-0 bg-black/90 flex items-center justify-center z-[200]"
+          onClick={() => setPreviewItem(null)}
+        >
+          <div 
+            className="relative max-w-5xl max-h-[90vh] w-full mx-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Close Button */}
+            <button
+              onClick={() => setPreviewItem(null)}
+              className="absolute -top-12 right-0 text-white hover:text-gray-300 transition-colors"
+            >
+              <X className="w-8 h-8" />
+            </button>
+
+            {/* Media Content */}
+            <div className="bg-black rounded-lg overflow-hidden">
+              {previewItem.media_type === 'image' ? (
+                <img 
+                  src={previewItem.public_url} 
+                  alt={previewItem.file_name}
+                  className="max-w-full max-h-[80vh] mx-auto object-contain"
+                />
+              ) : (
+                <video
+                  ref={videoRef}
+                  src={previewItem.public_url}
+                  controls
+                  autoPlay
+                  className="max-w-full max-h-[80vh] mx-auto"
+                >
+                  Your browser does not support the video tag.
+                </video>
+              )}
+            </div>
+
+            {/* File Info */}
+            <div className="mt-4 text-center text-white">
+              <p className="font-medium">{previewItem.file_name}</p>
+              <p className="text-sm text-gray-400 mt-1">
+                {previewItem.media_type === 'image' ? '🖼️ Ảnh' : '🎬 Video'} • {formatFileSize(previewItem.file_size)} • {formatDate(previewItem.created_at)}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deleteItem && (
+        <div 
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-[200]"
+          onClick={() => !deleting && setDeleteItem(null)}
+        >
+          <div 
+            className="bg-white rounded-xl shadow-xl max-w-md w-full mx-4 overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="p-6 text-center">
+              <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <AlertTriangle className="w-8 h-8 text-red-600" />
+              </div>
+              <h3 className="text-xl font-bold text-gray-900 mb-2">Xóa media?</h3>
+              <p className="text-gray-600">
+                Bạn có chắc muốn xóa <span className="font-medium text-gray-900">{deleteItem.file_name}</span>?
+              </p>
+              <p className="text-sm text-red-600 mt-2">
+                ⚠️ Hành động này sẽ xóa vĩnh viễn file khỏi server và không thể khôi phục!
+              </p>
+            </div>
+
+            {/* Preview */}
+            <div className="px-6 pb-4">
+              <div className="bg-gray-100 rounded-lg p-3 flex items-center gap-3">
+                <div className="w-12 h-12 bg-gray-200 rounded overflow-hidden flex-shrink-0">
+                  {deleteItem.media_type === 'image' ? (
+                    <img src={deleteItem.public_url} alt="" className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center bg-gray-900">
+                      <Play className="w-5 h-5 text-white" fill="white" />
+                    </div>
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-900 truncate">{deleteItem.file_name}</p>
+                  <p className="text-xs text-gray-500">{formatFileSize(deleteItem.file_size)}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="flex border-t">
+              <button
+                onClick={() => setDeleteItem(null)}
+                disabled={deleting}
+                className="flex-1 py-4 text-gray-700 hover:bg-gray-50 font-medium transition-colors disabled:opacity-50"
+              >
+                Hủy
+              </button>
+              <button
+                onClick={() => handleDeleteMedia(deleteItem)}
+                disabled={deleting}
+                className="flex-1 py-4 bg-red-600 text-white hover:bg-red-700 font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {deleting ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Đang xóa...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4" />
+                    Xóa vĩnh viễn
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
