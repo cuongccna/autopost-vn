@@ -70,16 +70,41 @@ function DraggablePost({ post, onClick }: DraggablePostProps) {
     transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
   } : undefined;
 
-  const getStatusColor = (status: string) => {
+  const getStatusStyles = (status: string) => {
     switch (status) {
-      case 'scheduled': return 'border-blue-200 bg-blue-50 hover:bg-blue-100';
-      case 'published': return 'border-green-200 bg-green-50 hover:bg-green-100';
-      case 'failed': return 'border-red-200 bg-red-50 hover:bg-red-100';
-      default: return 'border-gray-200 bg-gray-50 hover:bg-gray-100';
+      case 'scheduled': 
+        return {
+          border: 'border-l-4 border-l-blue-500 border-y border-r border-blue-100',
+          bg: 'bg-gradient-to-r from-blue-50 to-white',
+          hover: 'hover:from-blue-100 hover:to-blue-50',
+          badge: 'bg-blue-100 text-blue-700',
+        };
+      case 'published': 
+        return {
+          border: 'border-l-4 border-l-green-500 border-y border-r border-green-100',
+          bg: 'bg-gradient-to-r from-green-50 to-white',
+          hover: 'hover:from-green-100 hover:to-green-50',
+          badge: 'bg-green-100 text-green-700',
+        };
+      case 'failed': 
+        return {
+          border: 'border-l-4 border-l-red-500 border-y border-r border-red-100',
+          bg: 'bg-gradient-to-r from-red-50 to-white',
+          hover: 'hover:from-red-100 hover:to-red-50',
+          badge: 'bg-red-100 text-red-700',
+        };
+      default: 
+        return {
+          border: 'border-l-4 border-l-gray-400 border-y border-r border-gray-100',
+          bg: 'bg-gradient-to-r from-gray-50 to-white',
+          hover: 'hover:from-gray-100 hover:to-gray-50',
+          badge: 'bg-gray-100 text-gray-700',
+        };
     }
   };
 
   const statusInfo = getStatusIcon(post.status);
+  const styles = getStatusStyles(post.status);
   
   // Tạo tooltip đầy đủ thông tin
   const createTooltip = () => {
@@ -123,80 +148,84 @@ function DraggablePost({ post, onClick }: DraggablePostProps) {
     <div 
       ref={setNodeRef}
       style={style}
-      {...attributes}
-      {...listeners}
-      className={`group relative rounded-lg border p-2 cursor-pointer transition-all hover:shadow-md ${getStatusColor(post.status)} ${
-        isDragging ? 'opacity-50 rotate-3 scale-105' : ''
-      } ${post.status === 'scheduled' ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'}`}
-      onClick={onClick}
-      title={createTooltip()}
+      className={`group relative rounded-lg ${styles.border} ${styles.bg} ${styles.hover} transition-all duration-200 ${
+        isDragging ? 'opacity-60 rotate-2 scale-105 shadow-lg z-50' : 'hover:shadow-md'
+      }`}
     >
-      {/* Header với status và time */}
-      <div className="flex items-center justify-between mb-1">
-        <div className="flex items-center gap-1">
+      {/* Drag Handle - Chỉ hiện khi status = scheduled */}
+      {post.status === 'scheduled' && (
+        <div 
+          {...attributes}
+          {...listeners}
+          className="absolute -left-0 top-0 bottom-0 w-6 flex items-center justify-center cursor-grab active:cursor-grabbing bg-blue-100 hover:bg-blue-200 rounded-l-lg transition-colors border-r border-blue-200"
+          title="Kéo để thay đổi ngày"
+        >
+          <svg className="w-3 h-3 text-blue-500" fill="currentColor" viewBox="0 0 24 24">
+            <circle cx="9" cy="6" r="2"/>
+            <circle cx="15" cy="6" r="2"/>
+            <circle cx="9" cy="12" r="2"/>
+            <circle cx="15" cy="12" r="2"/>
+            <circle cx="9" cy="18" r="2"/>
+            <circle cx="15" cy="18" r="2"/>
+          </svg>
+        </div>
+      )}
+
+      {/* Content area - Click để xem chi tiết */}
+      <div 
+        className={`p-2 cursor-pointer ${post.status === 'scheduled' ? 'ml-6' : ''}`}
+        onClick={onClick}
+      >
+        {/* Header với time và status badge */}
+        <div className="flex items-center justify-between mb-1.5">
+          <span className={`text-xs font-semibold px-1.5 py-0.5 rounded ${styles.badge}`}>
+            {formatTime(new Date(post.datetime))}
+          </span>
+          
+          {/* Providers icons */}
+          <div className="flex gap-0.5">
+            {post.providers.slice(0, 3).map((provider, index) => (
+              <span
+                key={`${post.id}-${provider}-${index}`}
+                className="w-5 h-5 flex items-center justify-center bg-white rounded-full shadow-sm text-xs"
+                title={PROVIDERS[provider as keyof typeof PROVIDERS]?.label || provider}
+              >
+                {getProviderIcon(provider)}
+              </span>
+            ))}
+            {post.providers.length > 3 && (
+              <span className="w-5 h-5 flex items-center justify-center bg-gray-100 rounded-full text-[10px] font-medium text-gray-600">
+                +{post.providers.length - 3}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Title */}
+        <div className="flex items-start gap-1.5 mb-1">
           <span className="text-sm" title={statusInfo.tooltip}>
             {statusInfo.icon}
           </span>
-          <span className="text-xs text-gray-500 font-medium">
-            {formatTime(new Date(post.datetime))}
+          <span className="text-xs font-medium text-gray-800 line-clamp-2 flex-1">
+            {post.title || <span className="text-gray-400 italic">Không có tiêu đề</span>}
           </span>
         </div>
-        
-        {/* Providers icons */}
-        <div className="flex gap-0.5">
-          {post.providers.slice(0, 3).map((provider, index) => (
-            <span
-              key={`${post.id}-${provider}-${index}`}
-              className="text-xs"
-              title={PROVIDERS[provider as keyof typeof PROVIDERS]?.label || provider}
-            >
-              {getProviderIcon(provider)}
-            </span>
-          ))}
-          {post.providers.length > 3 && (
-            <span className="text-xs text-gray-400" title={`+${post.providers.length - 3} thêm`}>
-              +{post.providers.length - 3}
-            </span>
-          )}
-        </div>
+
+        {/* Media indicator */}
+        {post.mediaUrls && post.mediaUrls.length > 0 && (
+          <div className="flex items-center gap-1 text-xs text-gray-500">
+            <span>🖼️</span>
+            <span>{post.mediaUrls.length} media</span>
+          </div>
+        )}
+
+        {/* Error message for failed posts */}
+        {post.status === 'failed' && post.error && (
+          <div className="mt-1.5 p-1.5 bg-red-100 rounded text-xs text-red-700 line-clamp-1">
+            ⚠️ {post.error}
+          </div>
+        )}
       </div>
-
-      {/* Content preview với tooltip - chỉ hiển thị tiêu đề */}
-      <div className="text-sm text-gray-700 mb-1">
-        <div className="flex items-center gap-1.5">
-          <span className="text-base">📄</span>
-          <span className="text-xs font-medium truncate flex-1">
-            {post.title ? (
-              post.title.length > 20 ? post.title.substring(0, 20) + '...' : post.title
-            ) : (
-              <span className="text-gray-500">Không có tiêu đề</span>
-            )}
-          </span>
-        </div>
-      </div>
-
-      {/* Media indicator - tối giản */}
-      {post.mediaUrls && post.mediaUrls.length > 0 && (
-        <div className="absolute top-1 right-1">
-          <span className="text-xs bg-white bg-opacity-80 px-1 rounded" title={`${post.mediaUrls.length} file media`}>
-            🖼️
-          </span>
-        </div>
-      )}
-
-      {/* Error indicator for failed posts */}
-      {post.status === 'failed' && post.error && (
-        <div className="mt-1 text-xs text-red-600 truncate" title={post.error}>
-          ⚠️ {post.error}
-        </div>
-      )}
-
-      {/* Drag hint for scheduled posts */}
-      {post.status === 'scheduled' && (
-        <div className="absolute inset-0 opacity-0 group-hover:opacity-100 bg-blue-100 bg-opacity-50 rounded-lg flex items-center justify-center transition-opacity">
-          <span className="text-xs text-blue-700 font-medium">⬌ Kéo thả</span>
-        </div>
-      )}
     </div>
   );
 }
@@ -221,6 +250,7 @@ function DroppableColumn({ date, posts, dayName, dayIndex, onPostClick, onCreate
 
   const isToday = new Date().toDateString() === date.toDateString();
   const isPast = date < new Date() && !isToday;
+  const isWeekend = date.getDay() === 0 || date.getDay() === 6;
   
   const handleCreatePost = () => {
     if (onCreatePost && !isPast) {
@@ -232,112 +262,133 @@ function DroppableColumn({ date, posts, dayName, dayIndex, onPostClick, onCreate
   const formatDateDisplay = () => {
     const day = date.getDate();
     const month = date.getMonth() + 1;
-    if (isMobile) {
-      return `${day}/${month}`;
-    }
     return `${day}/${month}`;
   };
 
-  // Icons cho từng ngày
-  const getDayIcon = () => {
-    if (isToday) return '📅';
-    if (isPast) return '📄';
-    if (date.getDay() === 0 || date.getDay() === 6) return '🏖️'; // Weekend
-    return '📋';
-  };
+  // Đếm số bài theo status
+  const scheduledCount = posts.filter(p => p.status === 'scheduled').length;
+  const publishedCount = posts.filter(p => p.status === 'published').length;
+  const failedCount = posts.filter(p => p.status === 'failed').length;
   
   return (
     <div 
       ref={setNodeRef}
-      className={`rounded-xl border transition-all duration-200 ${
-        isMobile ? 'p-2 min-h-[120px]' : 'p-3 min-h-[200px]'
+      className={`rounded-xl border-2 transition-all duration-200 flex flex-col ${
+        isMobile ? 'min-h-[140px]' : 'min-h-[220px]'
       } ${
-        isToday ? 'border-blue-300 bg-blue-50 shadow-md' : 
-        isPast ? 'border-gray-200 bg-gray-50' : 
-        'border-gray-200 bg-white hover:border-gray-300 hover:shadow-sm'
-      } ${isOver ? 'ring-2 ring-blue-400 ring-opacity-50 bg-blue-100 scale-105' : ''}`}
+        isToday 
+          ? 'border-blue-400 bg-blue-50/50 shadow-lg shadow-blue-100' 
+          : isWeekend && !isPast
+            ? 'border-purple-200 bg-purple-50/30'
+            : isPast 
+              ? 'border-gray-200 bg-gray-50/50 opacity-75' 
+              : 'border-gray-200 bg-white hover:border-gray-300'
+      } ${isOver ? 'ring-4 ring-blue-300 ring-opacity-60 bg-blue-100/50 scale-[1.02] shadow-xl' : ''}`}
     >
       {/* Header */}
-      <div className="mb-2 flex items-center justify-between">
-        <div className={`flex items-center gap-1 font-medium ${
-          isToday ? 'text-blue-700' : isPast ? 'text-gray-500' : 'text-gray-900'
-        }`}>
-          <span className="text-sm" title={isToday ? 'Hôm nay' : isPast ? 'Đã qua' : 'Sắp tới'}>
-            {getDayIcon()}
-          </span>
-          <span className={isMobile ? 'text-xs' : 'text-sm'}>
-            {isMobile ? formatDateDisplay() : `${dayName} ${formatDateDisplay()}`}
-          </span>
+      <div className={`px-3 py-2 border-b ${
+        isToday 
+          ? 'bg-blue-100 border-blue-200' 
+          : isWeekend && !isPast
+            ? 'bg-purple-100/50 border-purple-200'
+            : isPast 
+              ? 'bg-gray-100 border-gray-200' 
+              : 'bg-gray-50 border-gray-100'
+      }`}>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className={`text-lg ${isToday ? 'animate-pulse' : ''}`}>
+              {isToday ? '📍' : isPast ? '📋' : isWeekend ? '🌴' : '📅'}
+            </span>
+            <div>
+              <div className={`font-bold ${isMobile ? 'text-sm' : 'text-base'} ${
+                isToday ? 'text-blue-700' : isPast ? 'text-gray-500' : 'text-gray-800'
+              }`}>
+                {isMobile ? formatDateDisplay() : `${dayName} ${formatDateDisplay()}`}
+              </div>
+              {isToday && (
+                <div className="text-xs text-blue-600 font-medium">Hôm nay</div>
+              )}
+            </div>
+          </div>
+          
+          {/* Status indicators */}
+          <div className="flex items-center gap-1">
+            {scheduledCount > 0 && (
+              <span className="w-5 h-5 rounded-full bg-blue-500 text-white text-xs flex items-center justify-center font-medium" title={`${scheduledCount} đã lên lịch`}>
+                {scheduledCount}
+              </span>
+            )}
+            {publishedCount > 0 && (
+              <span className="w-5 h-5 rounded-full bg-green-500 text-white text-xs flex items-center justify-center font-medium" title={`${publishedCount} đã đăng`}>
+                {publishedCount}
+              </span>
+            )}
+            {failedCount > 0 && (
+              <span className="w-5 h-5 rounded-full bg-red-500 text-white text-xs flex items-center justify-center font-medium" title={`${failedCount} thất bại`}>
+                {failedCount}
+              </span>
+            )}
+          </div>
         </div>
-        
-        {/* Post count badge */}
-        {posts.length > 0 && (
-          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-            isToday ? 'bg-blue-200 text-blue-800' : 
-            posts.some(p => p.status === 'failed') ? 'bg-red-100 text-red-700' :
-            posts.some(p => p.status === 'scheduled') ? 'bg-yellow-100 text-yellow-700' :
-            'bg-green-100 text-green-700'
-          }`}>
-            {posts.length}
-          </span>
-        )}
       </div>
       
-      {/* Drop zone indicator */}
-      {isOver && (
-        <div className="mb-2 text-center py-2 border-2 border-dashed border-blue-300 rounded-lg bg-blue-50">
-          <div className="text-lg mb-1">📅</div>
-          <span className="text-xs text-blue-600">
-            {isMobile ? 'Thả bài' : 'Thả để chuyển bài'}
-          </span>
-        </div>
-      )}
-      
-      {/* Posts */}
-      <div className="space-y-2">
-        {posts.length ? (
-          posts.map(post => (
-            <div key={post.id} data-post-id={post.id}>
-              <DraggablePost 
-                post={post} 
-                onClick={() => onPostClick(post)}
-              />
-            </div>
-          ))
-        ) : (
-          <div className={`text-center py-4 ${
-            isMobile ? 'py-2' : 'py-6'
-          } ${isPast ? 'text-gray-400' : 'text-gray-500'}`}>
-            <div className="text-2xl mb-1">
-              {isPast ? '📋' : '✨'}
-            </div>
-            <div className={`${isMobile ? 'text-xs' : 'text-sm'}`}>
-              {isPast ? 'Đã qua' : 'Trống'}
-            </div>
+      {/* Content area */}
+      <div className="flex-1 p-2 overflow-y-auto">
+        {/* Drop zone indicator */}
+        {isOver && (
+          <div className="mb-2 py-3 border-2 border-dashed border-blue-400 rounded-lg bg-blue-100/80 text-center">
+            <div className="text-xl mb-1">📥</div>
+            <span className="text-xs text-blue-700 font-medium">
+              Thả bài vào đây
+            </span>
           </div>
         )}
         
-        {/* Create post button */}
-        {!isPast && (
+        {/* Posts */}
+        <div className="space-y-2">
+          {posts.length > 0 ? (
+            posts.map(post => (
+              <DraggablePost 
+                key={post.id}
+                post={post} 
+                onClick={() => onPostClick(post)}
+              />
+            ))
+          ) : !isOver && (
+            <div className={`text-center py-4 ${isMobile ? 'py-3' : 'py-6'}`}>
+              <div className="text-3xl mb-2 opacity-50">
+                {isPast ? '📭' : '✨'}
+              </div>
+              <div className={`text-gray-400 ${isMobile ? 'text-xs' : 'text-sm'}`}>
+                {isPast ? 'Không có bài' : 'Chưa có bài đăng'}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+      
+      {/* Create post button - Fixed at bottom */}
+      {!isPast && (
+        <div className="p-2 pt-0">
           <button
             onClick={handleCreatePost}
-            className={`w-full py-3 px-3 rounded-lg border-2 border-dashed transition-all group ${
-              isMobile ? 'py-2' : 'py-3'
-            } ${
+            className={`w-full py-2 rounded-lg border-2 border-dashed transition-all flex items-center justify-center gap-2 ${
               posts.length === 0 
                 ? 'border-blue-300 text-blue-600 hover:bg-blue-50 hover:border-blue-400' 
                 : 'border-gray-300 text-gray-500 hover:bg-gray-50 hover:border-gray-400'
             }`}
-            title={posts.length === 0 ? 'Tạo bài đăng đầu tiên' : 'Thêm bài đăng mới'}
+            title="Tạo bài đăng mới"
           >
-            <div className="flex items-center justify-center">
-              <span className="group-hover:scale-110 transition-transform text-lg">
-                {posts.length === 0 ? '✨' : '➕'}
+            <span className="text-base">➕</span>
+            {!isMobile && (
+              <span className="text-xs font-medium">
+                {posts.length === 0 ? 'Thêm bài đầu tiên' : 'Thêm bài'}
               </span>
-            </div>
+            )}
           </button>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
