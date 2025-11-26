@@ -59,10 +59,13 @@ export async function GET(_request: NextRequest) {
         const statuses = schedules.map((s: any) => s.status);
         if (statuses.every((s: string) => s === 'published')) {
           status = 'published';
-        } else if (statuses.some((s: string) => s === 'scheduled')) {
+        } else if (statuses.some((s: string) => s === 'scheduled' || s === 'pending')) {
+          // Both 'scheduled' and 'pending' mean the post is waiting to be published
           status = 'scheduled';
         } else if (statuses.some((s: string) => s === 'failed')) {
           status = 'failed';
+        } else if (statuses.some((s: string) => s === 'processing')) {
+          status = 'processing';
         }
       }
 
