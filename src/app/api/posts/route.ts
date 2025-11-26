@@ -68,10 +68,13 @@ export async function GET(_request: NextRequest) {
 
       return {
         id: post.id,
+        title: post.title,
         content: post.content,
         media: post.media_urls || [],
+        media_urls: post.media_urls || [],
         providers,
         status,
+        scheduled_at: post.scheduled_at,
         created_at: post.created_at,
         updated_at: post.updated_at,
         schedules

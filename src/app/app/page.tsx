@@ -118,16 +118,29 @@ function AppPageContent() {
         // API returns array directly, not { posts: [...] }
         const postsArray = Array.isArray(data) ? data : (data.posts || []);
         
+        console.log('📅 [CALENDAR] Raw posts from API:', postsArray.slice(0, 3).map((p: any) => ({
+          id: p.id,
+          title: p.title?.substring(0, 20),
+          scheduled_at: p.scheduled_at,
+          created_at: p.created_at
+        })));
+        
         // Convert API posts to UI format
         const formattedPosts: Post[] = postsArray.map((post: any) => ({
           id: post.id,
-          title: post.content?.substring(0, 50) || 'Untitled', // Use content as title if no title
+          title: post.title || post.content?.substring(0, 50) || 'Untitled',
           datetime: post.scheduled_at || post.created_at,
           providers: post.providers || [],
           status: post.status || 'draft',
           content: post.content,
           mediaUrls: post.media_urls || post.media || [],
         }));
+        
+        console.log('📅 [CALENDAR] Formatted posts:', formattedPosts.slice(0, 3).map(p => ({
+          id: p.id,
+          title: p.title?.substring(0, 20),
+          datetime: p.datetime
+        })));
         
         console.log(`✅ Loaded ${formattedPosts.length} posts`);
         setPosts(formattedPosts);
