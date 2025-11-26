@@ -1,7 +1,9 @@
 'use client';
 
+import { useState } from 'react';
 import { PROVIDERS } from '@/lib/constants';
 import type { Post } from '@/types/Post';
+import { Eye, X, Image as ImageIcon, Video, Calendar, Clock, Send } from 'lucide-react';
 
 function getStatusBadge(post: Post) {
   const now = new Date();
@@ -64,11 +66,14 @@ function getTimeIndicator(post: Post) {
 }
 
 export default function Queue({ posts }: { posts: Post[] }) {
+  const [previewPost, setPreviewPost] = useState<Post | null>(null);
+  
   const sortedPosts = [...posts].sort(
     (a, b) => new Date(a.datetime).getTime() - new Date(b.datetime).getTime()
   );
 
   return (
+    <>
     <section className="rounded-2xl border bg-white p-4 shadow-sm">
       <div className="mb-3 flex items-center gap-2">
         <div className="text-base font-semibold">Hàng đợi</div>
@@ -112,6 +117,16 @@ export default function Queue({ posts }: { posts: Post[] }) {
                   </span>
                 </div>
               </div>
+              
+              {/* Preview Button */}
+              <button
+                onClick={() => setPreviewPost(post)}
+                className="flex-shrink-0 p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                title="Xem chi tiết"
+              >
+                <Eye className="w-4 h-4" />
+              </button>
+              
               <span className={`flex-shrink-0 rounded-md border px-2.5 py-1 text-xs font-medium ${badge.color}`}>
                 <span className="mr-1">{badge.icon}</span>
                 {badge.text}
@@ -126,5 +141,131 @@ export default function Queue({ posts }: { posts: Post[] }) {
         )}
       </div>
     </section>
+
+    {/* Preview Modal */}
+    {previewPost && (
+      <div 
+        className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+        onClick={() => setPreviewPost(null)}
+      >
+        <div 
+          className="bg-white rounded-xl shadow-2xl max-w-lg w-full max-h-[80vh] overflow-hidden"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Header */}
+          <div className="flex items-center justify-between px-4 py-3 border-b bg-gray-50">
+            <h3 className="font-semibold text-gray-900">Chi tiết bài đăng</h3>
+            <button 
+              onClick={() => setPreviewPost(null)}
+              className="p-1 hover:bg-gray-200 rounded-lg transition-colors"
+            >
+              <X className="w-5 h-5 text-gray-500" />
+            </button>
+          </div>
+
+          {/* Content */}
+          <div className="p-4 overflow-y-auto max-h-[calc(80vh-120px)]">
+            {/* Title */}
+            <h4 className="font-bold text-lg text-gray-900 mb-3">{previewPost.title}</h4>
+
+            {/* Content */}
+            {previewPost.content && (
+              <div className="mb-4">
+                <p className="text-gray-700 whitespace-pre-wrap text-sm leading-relaxed">
+                  {previewPost.content}
+                </p>
+              </div>
+            )}
+
+            {/* Media Preview */}
+            {previewPost.mediaUrls && previewPost.mediaUrls.length > 0 && (
+              <div className="mb-4">
+                <div className="flex items-center gap-2 text-xs text-gray-500 mb-2">
+                  {previewPost.mediaUrls.some(m => m.includes('video')) ? (
+                    <><Video className="w-4 h-4" /> Video đính kèm</>
+                  ) : (
+                    <><ImageIcon className="w-4 h-4" /> {previewPost.mediaUrls.length} ảnh đính kèm</>
+                  )}
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  {previewPost.mediaUrls.slice(0, 6).map((url, index) => (
+                    <div key={index} className="aspect-square rounded-lg overflow-hidden bg-gray-100">
+                      {url.includes('video') ? (
+                        <video src={url} className="w-full h-full object-cover" />
+                      ) : (
+                        <img src={url} alt="" className="w-full h-full object-cover" />
+                      )}
+                    </div>
+                  ))}
+                </div>
+                {previewPost.mediaUrls.length > 6 && (
+                  <p className="text-xs text-gray-500 mt-1">+{previewPost.mediaUrls.length - 6} thêm</p>
+                )}
+              </div>
+            )}
+
+            {/* Info Grid */}
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              {/* Schedule Time */}
+              <div className="flex items-center gap-2 p-2 bg-blue-50 rounded-lg">
+                <Calendar className="w-4 h-4 text-blue-600" />
+                <div>
+                  <p className="text-[10px] text-blue-600 font-medium">Lịch đăng</p>
+                  <p className="text-xs text-gray-700">
+                    {new Date(previewPost.datetime).toLocaleString('vi-VN', {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      day: '2-digit',
+                      month: '2-digit',
+                      year: 'numeric'
+                    })}
+                  </p>
+                </div>
+              </div>
+
+              {/* Status */}
+              <div className="flex items-center gap-2 p-2 bg-gray-50 rounded-lg">
+                <Clock className="w-4 h-4 text-gray-600" />
+                <div>
+                  <p className="text-[10px] text-gray-600 font-medium">Trạng thái</p>
+                  <p className="text-xs text-gray-700">{getStatusBadge(previewPost).text}</p>
+                </div>
+              </div>
+
+              {/* Platforms */}
+              <div className="col-span-2 flex items-center gap-2 p-2 bg-purple-50 rounded-lg">
+                <Send className="w-4 h-4 text-purple-600" />
+                <div className="flex-1">
+                  <p className="text-[10px] text-purple-600 font-medium mb-1">Nền tảng</p>
+                  <div className="flex flex-wrap gap-1">
+                    {previewPost.providers.map(provider => (
+                      <span
+                        key={provider}
+                        className={`rounded-md px-2 py-0.5 text-xs ${
+                          PROVIDERS[provider as keyof typeof PROVIDERS]?.chip || 'bg-gray-100 text-gray-700'
+                        }`}
+                      >
+                        {PROVIDERS[provider as keyof typeof PROVIDERS]?.tag || provider.toUpperCase()}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div className="px-4 py-3 border-t bg-gray-50 flex justify-end">
+            <button
+              onClick={() => setPreviewPost(null)}
+              className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg text-sm font-medium transition-colors"
+            >
+              Đóng
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   );
 }
