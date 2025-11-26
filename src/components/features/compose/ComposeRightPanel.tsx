@@ -289,6 +289,14 @@ export default function ComposeRightPanel({
 
   return (
     <div className="space-y-6">
+      {/* AI Content Planner - Đặt ở vị trí đầu tiên, nổi bật */}
+      <ContentPlanAssistant
+        composeData={composeData}
+        onApplySlot={applyPlanSlot}
+        onApplyAll={applyAllSlots}
+        showToast={showToast}
+      />
+
       {/* Publishing Channels */}
       <div className="bg-white rounded-lg shadow-sm border p-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">
@@ -403,13 +411,6 @@ export default function ComposeRightPanel({
           </button>
         </div>
       </div>
-
-      <ContentPlanAssistant
-        composeData={composeData}
-        onApplySlot={applyPlanSlot}
-        onApplyAll={applyAllSlots}
-        showToast={showToast}
-      />
 
       {/* Rate Limit Status */}
       {rateLimitData && (
