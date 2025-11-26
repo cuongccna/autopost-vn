@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Search, Grid3x3, List, Image as ImageIcon, Video, Calendar, Tag, Download, Loader2, Trash2, Play, Eye, AlertTriangle } from 'lucide-react';
+import { X, Search, Grid3x3, List, Image as ImageIcon, Video, Calendar, Tag, Download, Loader2, Trash2, Play, Eye, AlertTriangle, CheckCircle, XCircle } from 'lucide-react';
 
 interface MediaItem {
   id: string;
@@ -46,7 +46,16 @@ export default function MediaLibraryPicker({
   const [previewItem, setPreviewItem] = useState<MediaItem | null>(null);
   const [deleteItem, setDeleteItem] = useState<MediaItem | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
+
+  // Auto hide toast after 3 seconds
+  useEffect(() => {
+    if (toast) {
+      const timer = setTimeout(() => setToast(null), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [toast]);
 
   useEffect(() => {
     if (isOpen) {
@@ -121,7 +130,7 @@ export default function MediaLibraryPicker({
   const handleDeleteMedia = async (item: MediaItem) => {
     setDeleting(true);
     try {
-      const response = await fetch(`/api/media?id=${item.id}&permanent=true`, {
+      const response = await fetch(`/api/media?mediaId=${item.id}&hard=true`, {
         method: 'DELETE',
       });
       
@@ -130,13 +139,14 @@ export default function MediaLibraryPicker({
         setMedia(prev => prev.filter(m => m.id !== item.id));
         setSelectedMedia(prev => prev.filter(m => m.id !== item.id));
         setDeleteItem(null);
+        setToast({ type: 'success', message: `Đã xóa "${item.file_name}" thành công!` });
       } else {
         const data = await response.json();
-        alert(data.error || 'Không thể xóa media');
+        setToast({ type: 'error', message: data.error || 'Không thể xóa media' });
       }
     } catch (error) {
       console.error('Delete error:', error);
-      alert('Lỗi khi xóa media');
+      setToast({ type: 'error', message: 'Lỗi khi xóa media. Vui lòng thử lại!' });
     } finally {
       setDeleting(false);
     }
@@ -534,6 +544,30 @@ export default function MediaLibraryPicker({
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Toast Notification */}
+      {toast && (
+        <div 
+          className={`fixed bottom-6 right-6 z-[300] flex items-center gap-3 px-4 py-3 rounded-lg shadow-lg animate-in slide-in-from-bottom-5 ${
+            toast.type === 'success' 
+              ? 'bg-green-600 text-white' 
+              : 'bg-red-600 text-white'
+          }`}
+        >
+          {toast.type === 'success' ? (
+            <CheckCircle className="w-5 h-5 flex-shrink-0" />
+          ) : (
+            <XCircle className="w-5 h-5 flex-shrink-0" />
+          )}
+          <span className="font-medium">{toast.message}</span>
+          <button
+            onClick={() => setToast(null)}
+            className="ml-2 hover:opacity-70 transition-opacity"
+          >
+            <X className="w-4 h-4" />
+          </button>
         </div>
       )}
     </>
