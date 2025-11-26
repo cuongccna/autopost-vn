@@ -357,6 +357,20 @@ export async function PUT(request: NextRequest) {
           ]
         );
       }
+    } else if (scheduled_at !== undefined) {
+      // Update scheduled_at in all existing schedules for this post
+      // Only update schedules with status 'scheduled' or 'pending' (not already published/failed)
+      await query(
+        `UPDATE autopostvn_post_schedules 
+         SET scheduled_at = $1, 
+             status = CASE 
+               WHEN status IN ('scheduled', 'pending', 'processing') THEN 'scheduled'
+               ELSE status 
+             END,
+             updated_at = NOW()
+         WHERE post_id = $2 AND status NOT IN ('published', 'failed')`,
+        [scheduled_at, id]
+      );
     }
 
     // Log activity
