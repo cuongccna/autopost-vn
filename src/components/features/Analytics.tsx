@@ -206,9 +206,19 @@ export default function Analytics({ posts, className = '' }: AnalyticsProps) {
   const totalEngagement = analyticsData.summary?.total_engagement || insightsEngagement;
   const avgEngagementRate = analyticsData.summary?.avg_engagement_rate || insightsAvgEngagementRate;
 
+  // Helper function to check if post matches provider (handles both mapped and unmapped names)
+  const postMatchesProvider = (post: Post, provider: string): boolean => {
+    return post.providers.some(p => {
+      if (p === provider) return true;
+      if (provider === 'facebook' && p === 'facebook_page') return true;
+      if (provider === 'instagram' && p === 'instagram_business') return true;
+      return false;
+    });
+  };
+
   // Calculate channel data using real insights
   const channelData = ['facebook', 'instagram', 'zalo'].map(provider => {
-    const providerPosts = posts.filter(p => p.providers.includes(provider));
+    const providerPosts = posts.filter(p => postMatchesProvider(p, provider));
     const providerSuccess = providerPosts.filter(p => p.status === 'published');
     const providerFailed = providerPosts.filter(p => p.status === 'failed');
     

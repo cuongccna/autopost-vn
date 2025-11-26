@@ -16,12 +16,18 @@ export default function ChannelStatsChart({ posts }: ChannelStatsChartProps) {
     };
 
     posts.forEach(post => {
-      post.providers.forEach(provider => {
+      post.providers.forEach(rawProvider => {
+        // Map provider names to match stats keys
+        let provider = rawProvider;
+        if (rawProvider === 'facebook_page') provider = 'facebook';
+        if (rawProvider === 'instagram_business') provider = 'instagram';
+        
         if (provider in stats) {
           const key = provider as keyof typeof stats;
           stats[key].total++;
           if (post.status === 'published') stats[key].success++;
           if (post.status === 'failed') stats[key].failed++;
+          // scheduled posts are counted in scheduled (total - success - failed)
         }
       });
     });

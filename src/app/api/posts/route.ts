@@ -46,11 +46,17 @@ export async function GET(_request: NextRequest) {
     const transformedPosts = (posts || []).map((post: any) => {
       const schedules = post.schedules || [];
       
-      // Get unique platforms
+      // Get unique platforms - map provider names to match UI expectations
       const providers = [...new Set(
         schedules
           .filter((s: any) => s.provider)
-          .map((s: any) => s.provider)
+          .map((s: any) => {
+            const provider = s.provider;
+            // Map database provider names to UI-friendly names
+            if (provider === 'facebook_page') return 'facebook';
+            if (provider === 'instagram_business') return 'instagram';
+            return provider;
+          })
       )];
 
       // Determine overall status based on schedules
