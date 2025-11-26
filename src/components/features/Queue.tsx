@@ -3,7 +3,9 @@
 import { useState } from 'react';
 import { PROVIDERS } from '@/lib/constants';
 import type { Post } from '@/types/Post';
-import { Eye, X, Image as ImageIcon, Video, Calendar, Clock, Send } from 'lucide-react';
+import { Eye, X, Image as ImageIcon, Video, Calendar, Clock, Send, ChevronLeft, ChevronRight } from 'lucide-react';
+
+const ITEMS_PER_PAGE = 10;
 
 function getStatusBadge(post: Post) {
   const now = new Date();
@@ -67,10 +69,23 @@ function getTimeIndicator(post: Post) {
 
 export default function Queue({ posts }: { posts: Post[] }) {
   const [previewPost, setPreviewPost] = useState<Post | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
   
   const sortedPosts = [...posts].sort(
     (a, b) => new Date(a.datetime).getTime() - new Date(b.datetime).getTime()
   );
+
+  // Pagination
+  const totalPages = Math.ceil(sortedPosts.length / ITEMS_PER_PAGE);
+  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+  const endIndex = startIndex + ITEMS_PER_PAGE;
+  const paginatedPosts = sortedPosts.slice(startIndex, endIndex);
+
+  const goToPage = (page: number) => {
+    if (page >= 1 && page <= totalPages) {
+      setCurrentPage(page);
+    }
+  };
 
   return (
     <>
@@ -82,7 +97,7 @@ export default function Queue({ posts }: { posts: Post[] }) {
         </span>
       </div>
       <div className="divide-y">
-        {sortedPosts.map(post => {
+        {paginatedPosts.map(post => {
           const badge = getStatusBadge(post);
           const timeText = getTimeIndicator(post);
           
@@ -140,6 +155,63 @@ export default function Queue({ posts }: { posts: Post[] }) {
           </div>
         )}
       </div>
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between pt-4 mt-4 border-t">
+          <p className="text-xs text-gray-500">
+            Hiển thị {startIndex + 1}-{Math.min(endIndex, sortedPosts.length)} / {sortedPosts.length} bài
+          </p>
+          <div className="flex items-center gap-1">
+            {/* Previous */}
+            <button
+              onClick={() => goToPage(currentPage - 1)}
+              disabled={currentPage === 1}
+              className="p-1.5 rounded-lg hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              title="Trang trước"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+
+            {/* Page Numbers */}
+            {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => {
+              // Show first, last, current, and adjacent pages
+              const showPage = page === 1 || page === totalPages || Math.abs(page - currentPage) <= 1;
+              const showEllipsis = page === 2 && currentPage > 3 || page === totalPages - 1 && currentPage < totalPages - 2;
+              
+              if (showEllipsis && !showPage) {
+                return <span key={page} className="px-1 text-gray-400">...</span>;
+              }
+              
+              if (!showPage && !showEllipsis) return null;
+              
+              return (
+                <button
+                  key={page}
+                  onClick={() => goToPage(page)}
+                  className={`min-w-[28px] h-7 px-2 text-xs rounded-lg font-medium transition-colors ${
+                    currentPage === page
+                      ? 'bg-blue-600 text-white'
+                      : 'hover:bg-gray-100 text-gray-600'
+                  }`}
+                >
+                  {page}
+                </button>
+              );
+            })}
+
+            {/* Next */}
+            <button
+              onClick={() => goToPage(currentPage + 1)}
+              disabled={currentPage === totalPages}
+              className="p-1.5 rounded-lg hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              title="Trang sau"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
     </section>
 
     {/* Preview Modal */}

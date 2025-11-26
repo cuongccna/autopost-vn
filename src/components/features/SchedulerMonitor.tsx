@@ -2,6 +2,9 @@
 
 import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
+
+const ITEMS_PER_PAGE = 10;
 
 interface ScheduledPost {
   id: string;
@@ -54,6 +57,12 @@ export default function SchedulerMonitor() {
   const [loading, setLoading] = useState(true);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<SchedulerResult | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+
+  // Pagination
+  const totalPages = Math.ceil(scheduledPosts.length / ITEMS_PER_PAGE);
+  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+  const paginatedPosts = scheduledPosts.slice(startIndex, startIndex + ITEMS_PER_PAGE);
 
   // Fetch scheduled posts
   const fetchScheduledPosts = async () => {
@@ -245,7 +254,7 @@ export default function SchedulerMonitor() {
           </div>
         ) : (
           <div className="divide-y">
-            {scheduledPosts.map((schedule) => (
+            {paginatedPosts.map((schedule) => (
               <div key={schedule.id} className="p-6 hover:bg-gray-50 transition-colors">
                 <div className="flex items-start gap-4">
                   <div className="text-2xl">
@@ -298,6 +307,46 @@ export default function SchedulerMonitor() {
                 </div>
               </div>
             ))}
+          </div>
+        )}
+        
+        {/* Pagination */}
+        {scheduledPosts.length > ITEMS_PER_PAGE && (
+          <div className="p-4 border-t flex items-center justify-between">
+            <div className="text-sm text-gray-500">
+              Hiển thị {startIndex + 1}-{Math.min(startIndex + ITEMS_PER_PAGE, scheduledPosts.length)} / {scheduledPosts.length}
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="p-2 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <ChevronLeft className="w-5 h-5" />
+              </button>
+              
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                <button
+                  key={page}
+                  onClick={() => setCurrentPage(page)}
+                  className={`w-8 h-8 rounded text-sm font-medium ${
+                    currentPage === page
+                      ? 'bg-blue-600 text-white'
+                      : 'hover:bg-gray-100 text-gray-700'
+                  }`}
+                >
+                  {page}
+                </button>
+              ))}
+              
+              <button
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+                className="p-2 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <ChevronRight className="w-5 h-5" />
+              </button>
+            </div>
           </div>
         )}
       </div>
