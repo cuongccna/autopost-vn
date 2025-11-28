@@ -2,6 +2,7 @@ import { query } from '@/lib/db/postgres';
 import { validatePostForPublishing, logValidationActivity, ValidationResult } from '@/lib/post-validation';
 import { createPublisher, logPublishActivity, PublishResult, PublishData } from '@/lib/social-publishers';
 import { WorkspaceSettingsService } from '@/lib/services/workspace-settings.service';
+import { NotificationService } from '@/lib/services/notification.service';
 import logger from '@/lib/utils/logger';
 
 interface ScheduleJob {
@@ -260,6 +261,17 @@ export async function runScheduler(limit = 10): Promise<ProcessingResult> {
           // Kiểm tra xem tất cả schedules của post đã hoàn thành chưa
           await checkAndUpdatePostStatus(job.post_id);
 
+          // Gửi email thông báo thành công (async, không block)
+          NotificationService.notifyPublishSuccess({
+            postId: job.post_id,
+            postTitle: validation.data!.post.title || '',
+            postContent: validation.data!.post.content || '',
+            provider: socialAccount.provider,
+            accountName: socialAccount.name,
+            userId: job.user_id,
+            workspaceId: validation.data!.post.workspace_id
+          }).catch(err => console.error('📧 Notification error:', err));
+
         } else {
           console.log(`❌ [SCHEDULER] Failed to publish job ${job.id}: ${publishResult.error}`);
           
@@ -293,6 +305,18 @@ export async function runScheduler(limit = 10): Promise<ProcessingResult> {
               status: 'failed',
               message: `Max retries exceeded: ${publishResult.error}`
             });
+
+            // Gửi email thông báo thất bại (sau khi hết retry)
+            NotificationService.notifyPublishFailure({
+              postId: job.post_id,
+              postTitle: validation.data!.post.title || '',
+              postContent: validation.data!.post.content || '',
+              provider: socialAccount.provider,
+              accountName: socialAccount.name,
+              userId: job.user_id,
+              workspaceId: validation.data!.post.workspace_id,
+              error: publishResult.error || 'Unknown error'
+            }).catch(err => console.error('📧 Notification error:', err));
           }
         }
 

@@ -14,6 +14,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 import logger from './logger';
+import { NotificationService } from '@/lib/services/notification.service';
 
 interface TokenInfo {
   accountId: string;
@@ -309,12 +310,25 @@ export async function dailyTokenRefreshCheck(): Promise<void> {
 
   logger.info('Daily token refresh check completed', results);
 
-  // TODO: Send email notifications for tokens needing manual auth
+  // Send email notifications for tokens needing manual auth
   if (results.needsManualAuth.length > 0) {
     logger.warn('Accounts need manual re-authentication', {
       accounts: results.needsManualAuth
     });
-    // await sendEmailNotification(results.needsManualAuth);
+    
+    // Gửi email thông báo cho từng tài khoản sắp hết hạn
+    for (const account of results.needsManualAuth) {
+      try {
+        await NotificationService.notifyTokenExpiry({
+          userId: account.userId,
+          accountName: account.accountName,
+          provider: account.provider,
+          expiresAt: new Date(account.expiresAt)
+        });
+      } catch (err) {
+        logger.error('Failed to send token expiry notification', { account, error: err });
+      }
+    }
   }
 }
 
