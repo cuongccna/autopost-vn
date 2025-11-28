@@ -8,9 +8,10 @@ interface MobileSidebarProps {
 }
 
 const tabs = [
-  { id: 'calendar', label: 'Lịch', icon: '📅' },
-  { id: 'queue', label: 'Hàng đợi', icon: '📄' },
+  { id: 'calendar', label: 'Lịch & Lên lịch', icon: '📅' },
+  { id: 'queue', label: 'Hàng đợi & Nhật ký', icon: '📄' },
   { id: 'analytics', label: 'Phân tích', icon: '📈' },
+  { id: 'activities', label: 'Hoạt động', icon: '🔍' },
   { id: 'accounts', label: 'Tài khoản', icon: '👥' },
   { id: 'settings', label: 'Cài đặt', icon: '⚙️' },
 ];
