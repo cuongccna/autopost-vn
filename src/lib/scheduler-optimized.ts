@@ -388,20 +388,6 @@ async function processJob(
 
     // Check workspace settings (cached)
     const settings = await CacheService.getWorkspaceSettings(post.workspace_id);
-    
-    // Test mode check
-    if (settings.advanced.testMode) {
-      console.log(`🧪 [OPTIMIZED SCHEDULER] Test mode enabled for job ${jobId}`);
-      await updateJobStatus(jobId, 'published', 'Test mode: Simulated publish', 'test_' + jobId);
-      return {
-        detail: {
-          scheduleId: jobId,
-          postId,
-          status: 'success',
-          message: `Test mode: Simulated publish to ${socialAccount.provider}`
-        }
-      };
-    }
 
     // Rate limit check (batch checked)
     const rateLimit = rateLimitMap.get(post.workspace_id);

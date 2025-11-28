@@ -138,20 +138,6 @@ export async function runScheduler(limit = 10): Promise<ProcessingResult> {
         const workspaceId = validation.data!.post.workspace_id;
         const settings = await WorkspaceSettingsService.getSettings(workspaceId);
         
-        // Check if test mode is enabled
-        if (settings.advanced.testMode) {
-          console.log(`🧪 [SCHEDULER] Test mode enabled - simulating publish for job ${job.id}`);
-          await updateJobStatus(job.id, 'published', 'Test mode: Simulated publish', 'test_' + job.id);
-          result.successful++;
-          result.details.push({
-            scheduleId: job.id,
-            postId: job.post_id,
-            status: 'success',
-            message: `Test mode: Simulated publish to ${socialAccount.provider}`
-          });
-          continue;
-        }
-        
         // Check rate limit
         const rateLimit = await WorkspaceSettingsService.checkRateLimit(workspaceId, settings);
         if (!rateLimit.allowed) {

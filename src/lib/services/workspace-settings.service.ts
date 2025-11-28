@@ -15,7 +15,6 @@ export interface WorkspaceSettings {
   advanced: {
     autoDeleteOldPosts: boolean;
     autoDeleteDays: number;
-    testMode: boolean;
   };
 }
 
@@ -33,7 +32,6 @@ const DEFAULT_SETTINGS: WorkspaceSettings = {
   advanced: {
     autoDeleteOldPosts: false,
     autoDeleteDays: 30,
-    testMode: false,
   },
 };
 
@@ -184,12 +182,5 @@ export class WorkspaceSettingsService {
       default:
         return false;
     }
-  }
-  
-  /**
-   * Is test mode enabled
-   */
-  static isTestMode(settings: WorkspaceSettings): boolean {
-    return settings.advanced.testMode;
   }
 }

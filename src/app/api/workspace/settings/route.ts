@@ -19,7 +19,6 @@ const DEFAULT_SETTINGS = {
   advanced: {
     autoDeleteOldPosts: false,
     autoDeleteDays: 30,
-    testMode: false,
   },
 };
 
@@ -186,7 +185,6 @@ export async function PUT(request: NextRequest) {
       advanced: {
         autoDeleteOldPosts: settings.advanced?.autoDeleteOldPosts ?? DEFAULT_SETTINGS.advanced.autoDeleteOldPosts,
         autoDeleteDays: Math.max(1, settings.advanced?.autoDeleteDays || DEFAULT_SETTINGS.advanced.autoDeleteDays),
-        testMode: settings.advanced?.testMode ?? DEFAULT_SETTINGS.advanced.testMode,
       },
     };
     

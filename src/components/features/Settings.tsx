@@ -12,7 +12,6 @@ interface SettingsData {
   rateLimit: number;
   autoDelete: boolean;
   autoDeleteDays: number;
-  testMode: boolean;
 }
 
 interface SettingsProps {
@@ -66,7 +65,6 @@ export default function Settings({ settings, onSaveSettings, onResetSettings }: 
         rateLimit: data.settings.scheduling?.rateLimit || 10,
         autoDelete: data.settings.advanced?.autoDeleteOldPosts ?? false,
         autoDeleteDays: data.settings.advanced?.autoDeleteDays || 30,
-        testMode: data.settings.advanced?.testMode ?? false,
       };
       
       console.log('🔄 Converted settings:', loadedSettings);
@@ -104,7 +102,6 @@ export default function Settings({ settings, onSaveSettings, onResetSettings }: 
         advanced: {
           autoDeleteOldPosts: formData.autoDelete,
           autoDeleteDays: formData.autoDeleteDays,
-          testMode: formData.testMode,
         },
       };
       
@@ -303,18 +300,7 @@ export default function Settings({ settings, onSaveSettings, onResetSettings }: 
               )}
             </div>
             
-            <div className="rounded-xl border p-3 bg-gray-50">
-              <div className="text-sm font-medium mb-2">Chế độ thử nghiệm</div>
-              <label className="flex items-center gap-2 text-sm">
-                <input 
-                  type="checkbox" 
-                  className="h-4 w-4"
-                  checked={formData.testMode}
-                  onChange={(e) => setFormData({ ...formData, testMode: e.target.checked })}
-                />
-                Cho phép đăng thử nghiệm (không thực sự đăng)
-              </label>
-            </div>
+
           </div>
         </div>
         

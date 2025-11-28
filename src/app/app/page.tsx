@@ -56,7 +56,6 @@ function AppPageContent() {
     rateLimit: 10,
     autoDelete: false,
     autoDeleteDays: 30,
-    testMode: false,
   });
   const [isLoading, setIsLoading] = useState(true);
   const { toasts, toast, removeToast } = useToast();
@@ -88,7 +87,6 @@ function AppPageContent() {
         rateLimit: data.settings?.scheduling?.rateLimit ?? 10,
         autoDelete: data.settings?.advanced?.autoDeleteOldPosts ?? false,
         autoDeleteDays: data.settings?.advanced?.autoDeleteDays ?? 30,
-        testMode: data.settings?.advanced?.testMode ?? false,
       };
       
       setSettings(loadedSettings);
@@ -775,7 +773,6 @@ function AppPageContent() {
         advanced: {
           autoDeleteOldPosts: newSettings.autoDelete,
           autoDeleteDays: newSettings.autoDeleteDays,
-          testMode: newSettings.testMode,
         },
       };
 
@@ -825,7 +822,6 @@ function AppPageContent() {
       rateLimit: 10,
       autoDelete: false,
       autoDeleteDays: 30,
-      testMode: false,
     };
     setSettings(defaultSettings);
     const now = new Date();
