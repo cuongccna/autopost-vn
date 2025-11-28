@@ -362,18 +362,19 @@ export async function PUT(request: NextRequest) {
             id,
             account.id,
             scheduled_at || null,
-            scheduled_at ? 'scheduled' : 'pending'
+            'pending'  // Always use 'pending' - cron job looks for this status
           ]
         );
       }
     } else if (scheduled_at !== undefined) {
       // Update scheduled_at in all existing schedules for this post
-      // Only update schedules with status 'scheduled' or 'pending' (not already published/failed)
+      // Only update schedules with status 'pending' or 'scheduled' (not already published/failed)
+      // Reset status to 'pending' so cron job can pick them up
       await query(
         `UPDATE autopostvn_post_schedules 
          SET scheduled_at = $1, 
              status = CASE 
-               WHEN status IN ('scheduled', 'pending', 'processing') THEN 'scheduled'
+               WHEN status IN ('scheduled', 'pending', 'processing') THEN 'pending'
                ELSE status 
              END,
              updated_at = NOW()

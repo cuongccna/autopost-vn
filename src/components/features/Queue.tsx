@@ -71,8 +71,9 @@ export default function Queue({ posts }: { posts: Post[] }) {
   const [previewPost, setPreviewPost] = useState<Post | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   
+  // Sort by datetime DESC - newest/upcoming first
   const sortedPosts = [...posts].sort(
-    (a, b) => new Date(a.datetime).getTime() - new Date(b.datetime).getTime()
+    (a, b) => new Date(b.datetime).getTime() - new Date(a.datetime).getTime()
   );
 
   // Pagination
