@@ -23,7 +23,8 @@ export function usePermissions(): UsePermissionsReturn {
   const { data: session, status } = useSession();
   
   // Get user role from session, default to 'free'
-  const userRole: UserRole = (session?.user as any)?.role || 'free';
+  // Support both 'role' and 'user_role' for compatibility
+  const userRole: UserRole = (session?.user as any)?.user_role || (session?.user as any)?.role || 'free';
   const permissions = ROLE_PERMISSIONS[userRole];
   const isLoading = status === 'loading';
 

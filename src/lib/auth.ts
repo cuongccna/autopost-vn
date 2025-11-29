@@ -133,11 +133,14 @@ export const authOptions: NextAuthOptions = {
         if (user) {
           console.log('🎫 JWT: Setting token.id =', user.id)
           token.id = user.id
-          // Get user's role from user record, not workspace
+        }
+        
+        // Always fetch latest user_role from database (to reflect upgrades)
+        if (token.id) {
           try {
             const result = await query(
               'SELECT user_role FROM autopostvn_users WHERE id = $1 LIMIT 1',
-              [user.id]
+              [token.id]
             )
             
             if (result.rows.length > 0) {
@@ -149,7 +152,10 @@ export const authOptions: NextAuthOptions = {
             }
           } catch (error) {
             console.error('❌ JWT: Error fetching user role:', error)
-            token.user_role = 'free'
+            // Keep existing role if database error
+            if (!token.user_role) {
+              token.user_role = 'free'
+            }
           }
         }
         console.log('🎫 JWT: Returning token with id:', token.id)
