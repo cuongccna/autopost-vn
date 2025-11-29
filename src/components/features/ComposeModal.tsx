@@ -6,6 +6,7 @@ import { PROVIDERS } from '@/lib/constants';
 import MediaUploader, { UploadedMedia } from '@/components/ui/MediaUploader';
 import ContentEditor from '@/components/ui/ContentEditor';
 import TemplateLibrary from '@/components/ui/TemplateLibrary';
+import { toast } from '@/lib/utils/toast';
 
 interface Post {
   id: string;
@@ -133,6 +134,12 @@ export default function ComposeModal({ isOpen, onClose, onSubmit, goldenHours: c
 
   const handleSubmit = () => {
     if (!content.trim()) return;
+    
+    // Check if Instagram is selected but no media is uploaded
+    if (selectedChannels.has('instagram') && uploadedMedia.length === 0) {
+      toast.warning('Instagram yêu cầu phải có hình ảnh hoặc video. Vui lòng thêm media hoặc bỏ chọn Instagram.');
+      return;
+    }
     
     // Get URLs of successfully uploaded media
     const mediaUrls = uploadedMedia.map(m => m.url);

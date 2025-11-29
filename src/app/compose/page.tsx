@@ -250,6 +250,16 @@ export default function ComposePage() {
       return;
     }
 
+    // Check if Instagram is selected but no media is uploaded
+    if (data.channels.includes('instagram') && (!data.mediaUrls || data.mediaUrls.length === 0)) {
+      showToast({ 
+        message: 'Instagram yêu cầu phải có hình ảnh hoặc video. Vui lòng thêm media hoặc bỏ chọn Instagram.', 
+        type: 'warning',
+        duration: 5000
+      });
+      return;
+    }
+
     // Check rate limit for new posts
     if (!editingPostId && !canCreatePost()) {
       const reason = getBlockedReason();
