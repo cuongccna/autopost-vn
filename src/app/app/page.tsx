@@ -626,6 +626,14 @@ function AppPageContent() {
   };
 
   const handleCreatePostFromCalendar = (date: Date) => {
+    // Check if user has connected accounts
+    if (!accounts || accounts.length === 0) {
+      toast.warning('Vui lòng kết nối ít nhất một tài khoản mạng xã hội trước khi tạo bài đăng.');
+      setCurrentTab('accounts');
+      setCurrentMainTab('accounts');
+      return;
+    }
+    
     // Chuyển đến trang /compose với ngày được chọn
     const dateParam = date.toISOString();
     window.location.href = `/compose?date=${encodeURIComponent(dateParam)}`;

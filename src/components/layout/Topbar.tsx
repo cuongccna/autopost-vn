@@ -6,6 +6,7 @@ import MobileSidebar from './MobileSidebar';
 import { UserAvatarDropdown } from '../shared/UserAvatarDropdown';
 import AIStatusCompact from '../shared/AIStatusCompact';
 import AIStatusBadge from '../shared/AIStatusBadge';
+import { toast } from '@/lib/utils/toast';
 
 interface TopbarProps {
   onOpenCompose?: () => void; // Make optional for backward compatibility
@@ -27,10 +28,45 @@ export default function Topbar({ onOpenCompose, currentTab, onTabChange }: Topba
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [showResults, setShowResults] = useState(false);
+  const [hasConnectedAccounts, setHasConnectedAccounts] = useState<boolean | null>(null);
+  const [isCheckingAccounts, setIsCheckingAccounts] = useState(false);
   const searchRef = useRef<HTMLDivElement>(null);
 
+  // Check connected accounts on mount
+  useEffect(() => {
+    const checkAccounts = async () => {
+      try {
+        setIsCheckingAccounts(true);
+        const response = await fetch('/api/user/accounts');
+        
+        if (response.ok) {
+          const data = await response.json();
+          const hasAccounts = data.accounts && data.accounts.length > 0;
+          setHasConnectedAccounts(hasAccounts);
+        } else {
+          setHasConnectedAccounts(false);
+        }
+      } catch (error) {
+        console.error('Error checking accounts:', error);
+        setHasConnectedAccounts(false);
+      } finally {
+        setIsCheckingAccounts(false);
+      }
+    };
+    
+    checkAccounts();
+  }, []);
+
   const handleCreatePost = () => {
-    // Try new dedicated page first, fallback to modal if onOpenCompose provided
+    // Check if user has connected accounts
+    if (hasConnectedAccounts === false) {
+      toast.warning('Vui lòng kết nối ít nhất một tài khoản mạng xã hội trước khi tạo bài đăng.');
+      // Navigate to accounts tab
+      onTabChange('accounts');
+      return;
+    }
+    
+    // Navigate to compose page
     router.push('/compose');
   };
 
