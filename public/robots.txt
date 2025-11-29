@@ -1,0 +1,24 @@
+# Robots.txt for AutoPost VN
+# https://autopostvn.cloud
+
+User-agent: *
+Allow: /
+
+# Disallow admin/private pages
+Disallow: /api/
+Disallow: /app/
+Disallow: /compose/
+Disallow: /settings/
+Disallow: /auth/
+
+# Allow public pages
+Allow: /
+Allow: /pricing
+Allow: /features
+Allow: /privacy
+Allow: /terms
+Allow: /help
+Allow: /support
+
+# Sitemap
+Sitemap: https://autopostvn.cloud/sitemap.xml

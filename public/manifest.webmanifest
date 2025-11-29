@@ -1,20 +1,44 @@
 {
-  "name": "AutoPost VN",
-  "short_name": "AutoPostVN",
+  "name": "AutoPost VN - Tự động hóa đăng bài",
+  "short_name": "AutoPost VN",
+  "description": "Nền tảng tự động hóa đăng bài lên mạng xã hội hàng đầu Việt Nam",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#4f46e5",
+  "orientation": "portrait-primary",
+  "lang": "vi",
+  "categories": ["productivity", "social", "business"],
   "icons": [
     {
       "src": "/icons/android-chrome-192x192.png",
       "sizes": "192x192",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any maskable"
     },
     {
       "src": "/icons/android-chrome-512x512.png",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "screenshots": [],
+  "shortcuts": [
+    {
+      "name": "Tạo bài đăng",
+      "short_name": "Tạo bài",
+      "description": "Tạo bài đăng mới",
+      "url": "/compose",
+      "icons": [{ "src": "/icons/android-chrome-192x192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Lịch đăng bài",
+      "short_name": "Lịch",
+      "description": "Xem lịch đăng bài",
+      "url": "/app",
+      "icons": [{ "src": "/icons/android-chrome-192x192.png", "sizes": "192x192" }]
     }
   ]
 }
