@@ -7,6 +7,23 @@ export async function middleware(req: NextRequest) {
   
   console.log('🛡️ MIDDLEWARE: Checking path:', pathname)
   
+  // Allow access to static files (SEO, icons, etc.)
+  const staticFiles = [
+    '/sitemap.xml',
+    '/robots.txt',
+    '/favicon.ico',
+    '/manifest.webmanifest',
+    '/browserconfig.xml',
+    '/apple-touch-icon.png',
+    '/og-image.png',
+    '/icon-192.png',
+    '/icon-512.png'
+  ]
+  if (staticFiles.includes(pathname) || pathname.startsWith('/icons/')) {
+    console.log('🛡️ MIDDLEWARE: Allowing static file')
+    return NextResponse.next()
+  }
+  
   // Allow access to auth pages without token
   if (pathname.startsWith('/auth/')) {
     console.log('🛡️ MIDDLEWARE: Allowing auth page')
