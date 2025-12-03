@@ -36,7 +36,7 @@ export class NotificationService {
 
       // Lấy email user
       const userResult = await query<{ email: string; name: string }>(
-        'SELECT email, name FROM autopostvn_users WHERE id = $1',
+        'SELECT email, COALESCE(full_name, email) AS name FROM autopostvn_users WHERE id = $1',
         [data.userId]
       );
       
@@ -127,7 +127,7 @@ export class NotificationService {
 
       // Lấy email user
       const userResult = await query<{ email: string; name: string }>(
-        'SELECT email, name FROM autopostvn_users WHERE id = $1',
+        'SELECT email, COALESCE(full_name, email) AS name FROM autopostvn_users WHERE id = $1',
         [data.userId]
       );
       
@@ -241,7 +241,7 @@ export class NotificationService {
 
       // Lấy email user
       const userResult = await query<{ email: string; name: string }>(
-        'SELECT email, name FROM autopostvn_users WHERE id = $1',
+        'SELECT email, COALESCE(full_name, email) AS name FROM autopostvn_users WHERE id = $1',
         [data.userId]
       );
       
