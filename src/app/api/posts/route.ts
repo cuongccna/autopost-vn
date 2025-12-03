@@ -3,8 +3,8 @@ import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { query } from '@/lib/db/postgres';
 
-// GET /api/posts - Fetch user's posts
-export async function GET(_request: NextRequest) {
+// GET /api/posts - Fetch user's posts or single post by ID
+export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
     
@@ -13,8 +13,85 @@ export async function GET(_request: NextRequest) {
     }
 
     const userId = (session.user as any).id;
+    const { searchParams } = new URL(request.url);
+    const postId = searchParams.get('id');
     
-    // Fetch posts with their schedules and social accounts using PostgreSQL
+    // If postId is provided, fetch single post
+    if (postId) {
+      const result = await query(`
+        SELECT 
+          p.*,
+          COALESCE(
+            json_agg(
+              json_build_object(
+                'id', ps.id,
+                'status', ps.status,
+                'scheduled_at', ps.scheduled_at,
+                'published_at', ps.published_at,
+                'social_account_id', ps.social_account_id,
+                'provider', sa.provider,
+                'platform_name', sa.platform_name
+              )
+            ) FILTER (WHERE ps.id IS NOT NULL),
+            '[]'
+          ) as schedules
+        FROM autopostvn_posts p
+        LEFT JOIN autopostvn_post_schedules ps ON ps.post_id = p.id
+        LEFT JOIN autopostvn_social_accounts sa ON sa.id = ps.social_account_id
+        WHERE p.user_id = $1 AND p.id = $2
+        GROUP BY p.id
+      `, [userId, postId]);
+
+      if (result.rows.length === 0) {
+        return NextResponse.json({ error: 'Post not found' }, { status: 404 });
+      }
+
+      const post = result.rows[0];
+      const schedules = post.schedules || [];
+      
+      // Get unique platforms
+      const providers = [...new Set(
+        schedules
+          .filter((s: any) => s.provider)
+          .map((s: any) => {
+            const provider = s.provider;
+            if (provider === 'facebook_page') return 'facebook';
+            if (provider === 'instagram_business') return 'instagram';
+            return provider;
+          })
+      )];
+
+      // Determine overall status
+      let status = 'draft';
+      if (schedules.length > 0) {
+        const statuses = schedules.map((s: any) => s.status);
+        if (statuses.every((s: string) => s === 'published')) {
+          status = 'published';
+        } else if (statuses.some((s: string) => s === 'scheduled' || s === 'pending')) {
+          status = 'scheduled';
+        } else if (statuses.some((s: string) => s === 'failed')) {
+          status = 'failed';
+        } else if (statuses.some((s: string) => s === 'processing')) {
+          status = 'processing';
+        }
+      }
+
+      return NextResponse.json({
+        id: post.id,
+        title: post.title,
+        content: post.content,
+        media: post.media_urls || [],
+        media_urls: post.media_urls || [],
+        providers,
+        status,
+        scheduled_at: post.scheduled_at,
+        created_at: post.created_at,
+        updated_at: post.updated_at,
+        schedules
+      });
+    }
+    
+    // Fetch all posts for user
     const result = await query(`
       SELECT 
         p.*,

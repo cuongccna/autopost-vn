@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, useCallback, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
 import ComposeLeftPanel from '@/components/features/compose/ComposeLeftPanel';
@@ -66,7 +66,7 @@ const areArraysEqual = (a?: any[], b?: any[]) => {
   return true;
 };
 
-export default function ComposePage() {
+function ComposePageContent() {
   const router = useRouter();
   const { data: session, status } = useSession();
   const { showToast } = useToast();
@@ -143,7 +143,11 @@ export default function ComposePage() {
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [submissionResult, setSubmissionResult] = useState<any>(null);
   const [editingPostId, setEditingPostId] = useState<string | null>(null);
+  const [isLoadingPost, setIsLoadingPost] = useState<boolean>(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
+  
+  // Get search params for edit mode
+  const searchParams = useSearchParams();
   const [hasConnectedAccounts, setHasConnectedAccounts] = useState<boolean>(true);
   const [isCheckingAccounts, setIsCheckingAccounts] = useState<boolean>(true);
   
@@ -156,6 +160,99 @@ export default function ComposePage() {
     getRateLimitMessage 
   } = usePostRateLimit();
   
+  // Load post data when editing
+  useEffect(() => {
+    const editPostId = searchParams.get('edit');
+    const scheduledDate = searchParams.get('date');
+    
+    if (editPostId) {
+      setEditingPostId(editPostId);
+      setIsLoadingPost(true);
+      
+      // Fetch post data
+      const loadPostData = async () => {
+        try {
+          const response = await fetch(`/api/posts?id=${editPostId}`);
+          if (response.ok) {
+            const posts = await response.json();
+            // API returns array, find the post by ID
+            const post = Array.isArray(posts) 
+              ? posts.find((p: any) => p.id === editPostId) 
+              : posts;
+            
+            if (post) {
+              // Map post data to composeData format
+              setComposeData({
+                title: post.title || '',
+                content: post.content || '',
+                channels: post.providers || [],
+                scheduleAt: post.scheduled_at || '',
+                mediaUrls: post.media_urls || post.media || [],
+                postId: post.id,
+                aiContext: '',
+                metadata: {
+                  type: 'social',
+                  platform: 'Facebook Page',
+                  ratio: '1:1',
+                  hashtags: '',
+                  cta: 'Mua ngay',
+                  brandColor: '#0ea5e9',
+                }
+              });
+              
+              showToast({
+                title: 'Đang chỉnh sửa',
+                message: `Bài viết: ${post.title || 'Không có tiêu đề'}`,
+                type: 'info',
+                duration: 3000
+              });
+            } else {
+              showToast({
+                title: 'Không tìm thấy bài viết',
+                message: 'Bài viết có thể đã bị xóa.',
+                type: 'error',
+                duration: 5000
+              });
+              router.push('/app');
+            }
+          } else {
+            showToast({
+              title: 'Lỗi',
+              message: 'Không thể tải thông tin bài viết.',
+              type: 'error',
+              duration: 5000
+            });
+          }
+        } catch (error) {
+          console.error('Error loading post:', error);
+          showToast({
+            title: 'Lỗi',
+            message: 'Có lỗi xảy ra khi tải bài viết.',
+            type: 'error',
+            duration: 5000
+          });
+        } finally {
+          setIsLoadingPost(false);
+        }
+      };
+      
+      loadPostData();
+    } else if (scheduledDate) {
+      // Pre-fill scheduled date if provided
+      try {
+        const date = new Date(scheduledDate);
+        if (!isNaN(date.getTime())) {
+          setComposeData(prev => ({
+            ...prev,
+            scheduleAt: date.toISOString()
+          }));
+        }
+      } catch (e) {
+        console.error('Invalid date param:', e);
+      }
+    }
+  }, [searchParams, router, showToast]);
+
   // Check authentication and connected accounts
   useEffect(() => {
     // 🚨 EMERGENCY: Disable rate limit check to prevent infinite loop
@@ -376,10 +473,13 @@ export default function ComposePage() {
   };
 
   // Loading state
-  if (status === 'loading') {
+  if (status === 'loading' || isLoadingPost) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center flex-col gap-4">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+        {isLoadingPost && (
+          <p className="text-gray-600">Đang tải thông tin bài viết...</p>
+        )}
       </div>
     );
   }
@@ -622,5 +722,19 @@ export default function ComposePage() {
         type="warning"
       />
     </div>
+  );
+}
+
+// Wrap with Suspense for useSearchParams
+export default function ComposePage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center flex-col gap-4">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+        <p className="text-gray-600">Đang tải...</p>
+      </div>
+    }>
+      <ComposePageContent />
+    </Suspense>
   );
 }
