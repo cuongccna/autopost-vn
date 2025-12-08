@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, Suspense } from 'react';
+import { useState, useEffect, useCallback, Suspense, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
@@ -151,6 +151,9 @@ function ComposePageContent() {
   const [hasConnectedAccounts, setHasConnectedAccounts] = useState<boolean>(true);
   const [isCheckingAccounts, setIsCheckingAccounts] = useState<boolean>(true);
   
+  // Ref to track if post data has been loaded (prevents re-fetching)
+  const hasLoadedPostRef = useRef<boolean>(false);
+  
   // Rate limit hook
   const { 
     rateLimitData, 
@@ -165,7 +168,13 @@ function ComposePageContent() {
     const editPostId = searchParams.get('edit');
     const scheduledDate = searchParams.get('date');
     
+    // Prevent re-fetching if already loaded
+    if (hasLoadedPostRef.current) {
+      return;
+    }
+    
     if (editPostId) {
+      hasLoadedPostRef.current = true;
       setEditingPostId(editPostId);
       setIsLoadingPost(true);
       
@@ -200,37 +209,16 @@ function ComposePageContent() {
                 }
               });
               
-              showToast({
-                title: 'Đang chỉnh sửa',
-                message: `Bài viết: ${post.title || 'Không có tiêu đề'}`,
-                type: 'info',
-                duration: 3000
-              });
+              console.log('Post loaded for editing:', post.title);
             } else {
-              showToast({
-                title: 'Không tìm thấy bài viết',
-                message: 'Bài viết có thể đã bị xóa.',
-                type: 'error',
-                duration: 5000
-              });
+              console.error('Post not found');
               router.push('/app');
             }
           } else {
-            showToast({
-              title: 'Lỗi',
-              message: 'Không thể tải thông tin bài viết.',
-              type: 'error',
-              duration: 5000
-            });
+            console.error('Failed to fetch post');
           }
         } catch (error) {
           console.error('Error loading post:', error);
-          showToast({
-            title: 'Lỗi',
-            message: 'Có lỗi xảy ra khi tải bài viết.',
-            type: 'error',
-            duration: 5000
-          });
         } finally {
           setIsLoadingPost(false);
         }
@@ -238,6 +226,7 @@ function ComposePageContent() {
       
       loadPostData();
     } else if (scheduledDate) {
+      hasLoadedPostRef.current = true;
       // Pre-fill scheduled date if provided
       try {
         const date = new Date(scheduledDate);
@@ -251,7 +240,7 @@ function ComposePageContent() {
         console.error('Invalid date param:', e);
       }
     }
-  }, [searchParams, router, showToast]);
+  }, [searchParams, router]);
 
   // Check authentication and connected accounts
   useEffect(() => {
