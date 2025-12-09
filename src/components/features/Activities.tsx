@@ -21,7 +21,7 @@ const categoryNames = {
 
 export default function Activities() {
   const [activeFilter, setActiveFilter] = useState<'all' | 'recent' | 'errors' | 'success'>('recent');
-  const { stats, loading: statsLoading } = useActivityStats(undefined, 7);
+  const { stats, loading: statsLoading } = useActivityStats(undefined, 30);
 
   const getFilterConfig = () => {
     switch (activeFilter) {
@@ -57,7 +57,7 @@ export default function Activities() {
               <div>
                 <p className="text-sm font-medium text-blue-700">Tổng hoạt động</p>
                 <p className="text-xl font-bold text-blue-900">{stats.total_actions}</p>
-                <p className="text-xs text-blue-600">7 ngày qua</p>
+                <p className="text-xs text-blue-600">30 ngày qua</p>
               </div>
             </div>
           </div>
