@@ -4,8 +4,10 @@ import { formatSocialContent } from '@/lib/utils/format-social-content';
 // Initialize Gemini AI with API key
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
-// Use Gemini 1.5 Flash for better availability and quota
-const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+// Use configured model or fallback to a stable version
+// Available models change frequently, so we use an env var
+const modelName = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
+const model = genAI.getGenerativeModel({ model: modelName });
 
 export interface GeminiConfig {
   temperature?: number;
@@ -301,7 +303,7 @@ Trả về chỉ nội dung caption dạng plain text, không có markdown, khô
     return text;
   } catch (error) {
     console.error('Gemini caption generation error:', error);
-    throw new Error('Không thể tạo caption. Vui lòng thử lại.');
+    throw new Error(`Không thể tạo caption: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
