@@ -164,7 +164,7 @@ class ActivityLogger {
         ai_action: action,
         platform,
         error_message: error,
-        model: 'gemini-2.0-flash-lite',
+        model: 'gemini-1.5-flash',
       }
     });
   }

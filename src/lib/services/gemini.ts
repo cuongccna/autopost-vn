@@ -4,8 +4,8 @@ import { formatSocialContent } from '@/lib/utils/format-social-content';
 // Initialize Gemini AI with API key
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
-// Use Gemini 2.0 Flash-Lite for lowest cost ($0.075 input, $0.30 output per 1M tokens)
-const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-lite' });
+// Use Gemini 1.5 Flash for better availability and quota
+const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
 export interface GeminiConfig {
   temperature?: number;
