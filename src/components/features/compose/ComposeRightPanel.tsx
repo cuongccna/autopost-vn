@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { PROVIDERS } from '@/lib/constants';
-import ContentPlanAssistant from '@/components/features/compose/ContentPlanAssistant';
+// import ContentPlanAssistant from '@/components/features/compose/ContentPlanAssistant';
 import type { AIContentPlanDay, AIContentPlanSlot, AIContentPlanResponse } from '@/types/ai';
 import { mapProvidersToAPI } from '@/lib/constants';
 
@@ -289,13 +289,27 @@ export default function ComposeRightPanel({
 
   return (
     <div className="space-y-6">
-      {/* AI Content Planner - Đặt ở vị trí đầu tiên, nổi bật */}
-      <ContentPlanAssistant
-        composeData={composeData}
-        onApplySlot={applyPlanSlot}
-        onApplyAll={applyAllSlots}
-        showToast={showToast}
-      />
+      {/* AI Content Planner Link */}
+      <div className="bg-gradient-to-r from-indigo-600 to-purple-600 rounded-xl p-4 text-white shadow-lg">
+        <div className="flex items-center gap-3 mb-3">
+          <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center text-2xl">
+            🤖
+          </div>
+          <div>
+            <h3 className="font-bold text-lg">AI Trợ Lý Lịch Đăng</h3>
+            <p className="text-indigo-100 text-sm">Lập kế hoạch tự động cho cả tuần</p>
+          </div>
+        </div>
+        <p className="text-sm text-indigo-50 mb-4">
+          Tạo lịch đăng bài thông minh cho Facebook, Instagram và Zalo OA với gợi ý nội dung và thời gian tối ưu.
+        </p>
+        <a 
+          href="/ai-planner" 
+          className="block w-full py-2 bg-white text-indigo-600 text-center font-semibold rounded-lg hover:bg-indigo-50 transition-colors"
+        >
+          ✨ Mở AI Planner
+        </a>
+      </div>
 
       {/* Publishing Channels */}
       <div className="bg-white rounded-lg shadow-sm border p-6">
