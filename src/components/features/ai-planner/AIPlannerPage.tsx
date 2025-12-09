@@ -307,6 +307,12 @@ export default function AIPlannerPage() {
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="mb-8">
+        <button 
+          onClick={() => router.back()} 
+          className="flex items-center gap-2 text-gray-600 hover:text-gray-900 transition-colors mb-4 font-medium"
+        >
+          ← Quay lại
+        </button>
         <h1 className="text-3xl font-bold text-gray-900">AI Trợ Lý Lịch Đăng</h1>
         <p className="mt-2 text-gray-600">Lập kế hoạch nội dung tự động cho Facebook, Instagram và Zalo OA</p>
       </div>
