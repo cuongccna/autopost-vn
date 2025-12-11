@@ -208,9 +208,8 @@ export class FacebookPublisher extends BaseSocialPublisher {
       }
 
       // Determine API endpoint
-      const endpoint = uploadedMediaIds.length > 0 
-        ? `https://graph.facebook.com/v18.0/${pageId}/photos`
-        : `https://graph.facebook.com/v18.0/${pageId}/feed`;
+      // Always use feed endpoint when attaching media IDs (since we already uploaded them as unpublished)
+      const endpoint = `https://graph.facebook.com/v18.0/${pageId}/feed`;
 
       console.log('🚀 Calling Facebook API:', endpoint);
 
