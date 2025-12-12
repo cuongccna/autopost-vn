@@ -88,7 +88,7 @@ export async function GET(request: NextRequest) {
 
 
       return NextResponse.redirect(
-        `${baseUrl}/app?oauth_success=zalo&account=${encodeURIComponent(savedAccount.account_name)}`
+        `${baseUrl}/app?oauth_success=zalo&account=${encodeURIComponent(savedAccount.account_name)}&accounts_saved=1`
       );
     } catch (error) {
       console.error('🔍 Zalo Callback - Processing error:', error);
