@@ -2,6 +2,7 @@ import { query } from '@/lib/db/postgres';
 import { OAuthTokenManager } from '@/lib/services/TokenEncryptionService';
 import { withRateLimit, checkRateLimit } from '@/lib/utils/rateLimiter';
 import logger, { loggers } from '@/lib/utils/logger';
+import crypto from 'crypto';
 
 export interface PublishResult {
   success: boolean;
@@ -916,13 +917,36 @@ export class ZaloPublisher extends BaseSocialPublisher {
         console.log('⚠️ Zalo scheduled posting not fully supported via API, publishing immediately');
       }
 
+      // Generate appsecret_proof for Zalo API security
+      const appSecret = process.env.ZALO_APP_SECRET;
+      let appsecretProof = null;
+      
+      if (appSecret) {
+        try {
+          appsecretProof = crypto
+            .createHmac('sha256', appSecret)
+            .update(accessToken)
+            .digest('hex');
+        } catch (e) {
+          console.error('Failed to generate appsecret_proof:', e);
+        }
+      } else {
+        console.warn('ZALO_APP_SECRET not configured, skipping appsecret_proof');
+      }
+
+      console.log('Zalo Publish Debug:', {
+        hasSecret: !!appSecret,
+        secretPrefix: appSecret ? appSecret.substring(0, 3) + '...' : 'N/A',
+        hasProof: !!appsecretProof
+      });
+
       // Zalo API v2.0 Article Create
-      // Note: v2.0 usually works with just access_token in header
       const response = await fetch(`https://openapi.zalo.me/v2.0/article/create`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'access_token': accessToken
+          'access_token': accessToken,
+          ...(appsecretProof ? { 'appsecret_proof': appsecretProof } : {})
         },
         body: JSON.stringify(articleData)
       });
