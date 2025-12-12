@@ -1,9 +1,10 @@
 /**
- * Token Refresh Service
+ * Token Refresh Service (PostgreSQL Version)
  * 
  * Handles automatic token refresh for social media platforms:
  * - Facebook: Long-lived tokens (60 days)
  * - Instagram: Inherits Facebook token lifecycle
+ * - Zalo: Short-lived tokens (25 hours)
  * 
  * Features:
  * - Monitor token expiration
@@ -12,8 +13,9 @@
  * - Graceful degradation
  */
 
-import { createClient } from '@supabase/supabase-js';
+import { query, update } from '@/lib/db/postgres';
 import logger from './logger';
+import { OAuthTokenManager } from '@/lib/services/TokenEncryptionService';
 
 interface TokenInfo {
   accountId: string;
@@ -21,6 +23,7 @@ interface TokenInfo {
   accountName: string;
   expiresAt: Date | null;
   daysUntilExpiry: number;
+  hoursUntilExpiry: number;
   needsRefresh: boolean;
   needsManualAuth: boolean;
 }
@@ -28,62 +31,65 @@ interface TokenInfo {
 interface RefreshResult {
   success: boolean;
   newToken?: string;
+  newRefreshToken?: string;
   expiresAt?: Date;
   error?: string;
 }
 
-/**
- * Facebook Token Lifecycle:
- * - Short-lived tokens: 1-2 hours (from OAuth)
- * - Long-lived tokens: 60 days (exchanged from short-lived)
- * - Page tokens: Don't expire if page exists
- * - Refresh: Can extend long-lived tokens before expiry
- */
 export class TokenRefreshService {
-  private supabase: ReturnType<typeof createClient>;
-
-  constructor() {
-    this.supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    );
-  }
-
+  
   /**
    * Get all tokens that need attention
    */
   async getTokensNeedingAttention(): Promise<TokenInfo[]> {
     try {
-      const { data: accounts, error } = await this.supabase
-        .from('autopostvn_social_accounts')
-        .select('id, provider, name, expires_at, workspace_id')
-        .in('provider', ['facebook', 'facebook_page', 'instagram'])
-        .eq('status', 'connected');
+      const result = await query(
+        `SELECT id, provider, name, expires_at, workspace_id 
+         FROM autopostvn_social_accounts 
+         WHERE provider IN ('facebook', 'facebook_page', 'instagram', 'zalo') 
+         AND status = 'connected'`
+      );
 
-      if (error) throw error;
-
+      const accounts = result.rows;
       const now = new Date();
       const tokens: TokenInfo[] = [];
 
-      for (const account of (accounts as any[]) || []) {
+      for (const account of accounts) {
         const expiresAt = account.expires_at ? new Date(account.expires_at) : null;
         
         let daysUntilExpiry = Infinity;
+        let hoursUntilExpiry = Infinity;
+        
         if (expiresAt) {
-          daysUntilExpiry = Math.floor((expiresAt.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+          const diffMs = expiresAt.getTime() - now.getTime();
+          daysUntilExpiry = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+          hoursUntilExpiry = Math.floor(diffMs / (1000 * 60 * 60));
         }
 
         // Facebook Page tokens don't expire
         const isPageToken = account.provider === 'facebook_page';
         
+        // Refresh thresholds:
+        // Facebook/Instagram: 7 days
+        // Zalo: 5 hours (since it expires in 25h)
+        let needsRefresh = false;
+        if (!isPageToken && expiresAt) {
+          if (account.provider === 'zalo') {
+            needsRefresh = hoursUntilExpiry <= 5 && hoursUntilExpiry > -1;
+          } else {
+            needsRefresh = daysUntilExpiry <= 7 && daysUntilExpiry > -1;
+          }
+        }
+
         tokens.push({
           accountId: account.id,
           provider: account.provider,
           accountName: account.name,
           expiresAt,
           daysUntilExpiry: isPageToken ? Infinity : daysUntilExpiry,
-          needsRefresh: !isPageToken && daysUntilExpiry <= 7 && daysUntilExpiry > 0,
-          needsManualAuth: !isPageToken && daysUntilExpiry <= 0,
+          hoursUntilExpiry: isPageToken ? Infinity : hoursUntilExpiry,
+          needsRefresh,
+          needsManualAuth: !isPageToken && hoursUntilExpiry <= -1, // Expired for more than 1 hour
         });
       }
 
@@ -96,7 +102,6 @@ export class TokenRefreshService {
 
   /**
    * Refresh Facebook long-lived token
-   * https://developers.facebook.com/docs/facebook-login/guides/access-tokens/get-long-lived
    */
   async refreshFacebookToken(
     currentToken: string,
@@ -153,29 +158,105 @@ export class TokenRefreshService {
   }
 
   /**
+   * Refresh Zalo OA token
+   */
+  async refreshZaloToken(
+    refreshToken: string,
+    accountId: string
+  ): Promise<RefreshResult> {
+    try {
+      const body = new URLSearchParams({
+        app_id: process.env.ZALO_APP_ID!,
+        grant_type: 'refresh_token',
+        refresh_token: refreshToken
+      });
+
+      console.log('🔄 Refreshing Zalo token...', { accountId });
+
+      const response = await fetch('https://oauth.zaloapp.com/v4/oa/access_token', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'secret_key': process.env.ZALO_APP_SECRET!
+        },
+        body: body.toString()
+      });
+
+      const data = await response.json();
+
+      if (data.error) {
+        logger.error('Zalo token refresh failed', {
+          accountId,
+          error: data.error_name || data.message || 'Unknown error',
+          details: data
+        });
+
+        return {
+          success: false,
+          error: data.error_name || 'Token refresh failed'
+        };
+      }
+
+      // Zalo returns: { access_token, refresh_token, expires_in }
+      // expires_in is usually 90000 seconds (25 hours)
+      const expiresAt = new Date(Date.now() + (parseInt(data.expires_in) * 1000));
+
+      logger.info('Zalo token refreshed successfully', {
+        accountId,
+        expiresIn: data.expires_in,
+        expiresAt: expiresAt.toISOString()
+      });
+
+      return {
+        success: true,
+        newToken: data.access_token,
+        newRefreshToken: data.refresh_token, // Zalo rotates refresh tokens
+        expiresAt
+      };
+    } catch (error: any) {
+      logger.error('Zalo token refresh error', {
+        accountId,
+        error: error.message
+      });
+
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
+  /**
    * Update token in database
    */
   async updateToken(
     accountId: string,
     newToken: string,
-    expiresAt: Date
+    expiresAt: Date,
+    newRefreshToken?: string
   ): Promise<boolean> {
     try {
-      // Import encryption service
-      const { encrypt } = await import('./encryption');
-      const encryptedToken = encrypt(newToken);
+      const encryptedToken = OAuthTokenManager.encryptForStorage(newToken);
+      
+      const updateData: any = {
+        token_encrypted: encryptedToken,
+        expires_at: expiresAt.toISOString(),
+        updated_at: new Date().toISOString()
+      };
 
-      const { error } = await this.supabase
-        .from('autopostvn_social_accounts')
-        // @ts-ignore - Supabase type inference issue
-        .update({
-          token_encrypted: encryptedToken,
-          expires_at: expiresAt.toISOString(),
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', accountId);
+      if (newRefreshToken) {
+        updateData.refresh_token_encrypted = OAuthTokenManager.encryptForStorage(newRefreshToken);
+      }
 
-      if (error) throw error;
+      // Build dynamic update query
+      const keys = Object.keys(updateData);
+      const setClause = keys.map((key, index) => `${key} = $${index + 2}`).join(', ');
+      const values = [accountId, ...Object.values(updateData)];
+
+      await query(
+        `UPDATE autopostvn_social_accounts SET ${setClause} WHERE id = $1`,
+        values
+      );
 
       logger.info('Token updated in database', {
         accountId,
@@ -226,42 +307,47 @@ export class TokenRefreshService {
         continue;
       }
 
-      // Only refresh Facebook user tokens (not page tokens)
-      if (token.provider !== 'facebook') {
-        continue;
-      }
-
       logger.info('Attempting token refresh', {
         accountId: token.accountId,
         accountName: token.accountName,
-        daysUntilExpiry: token.daysUntilExpiry
+        provider: token.provider,
+        hoursUntilExpiry: token.hoursUntilExpiry
       });
 
-      // Get current encrypted token
-      const { data: account } = await this.supabase
-        .from('autopostvn_social_accounts')
-        .select('token_encrypted')
-        .eq('id', token.accountId)
-        .single();
+      // Get current encrypted tokens
+      const accountResult = await query(
+        'SELECT token_encrypted, refresh_token_encrypted FROM autopostvn_social_accounts WHERE id = $1 LIMIT 1',
+        [token.accountId]
+      );
 
-      if (!account) {
+      if (accountResult.rows.length === 0) {
         results.failed++;
         continue;
       }
 
-      // Decrypt token
-      const { decrypt } = await import('./encryption');
-      const currentToken = decrypt((account as any).token_encrypted);
+      const account = accountResult.rows[0];
+      let refreshResult: RefreshResult = { success: false };
 
-      // Refresh token
-      const refreshResult = await this.refreshFacebookToken(currentToken, token.accountId);
+      if (token.provider === 'facebook') {
+        const currentToken = OAuthTokenManager.decryptForUse(account.token_encrypted);
+        refreshResult = await this.refreshFacebookToken(currentToken, token.accountId);
+      } else if (token.provider === 'zalo') {
+        if (!account.refresh_token_encrypted) {
+          logger.error('No refresh token found for Zalo account', { accountId: token.accountId });
+          results.failed++;
+          continue;
+        }
+        const refreshToken = OAuthTokenManager.decryptForUse(account.refresh_token_encrypted);
+        refreshResult = await this.refreshZaloToken(refreshToken, token.accountId);
+      }
 
       if (refreshResult.success && refreshResult.newToken && refreshResult.expiresAt) {
         // Update database
         const updated = await this.updateToken(
           token.accountId,
           refreshResult.newToken,
-          refreshResult.expiresAt
+          refreshResult.expiresAt,
+          refreshResult.newRefreshToken
         );
 
         if (updated) {
