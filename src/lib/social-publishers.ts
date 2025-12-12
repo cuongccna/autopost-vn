@@ -875,59 +875,56 @@ export class ZaloPublisher extends BaseSocialPublisher {
       const accessToken = this.decryptToken(this.account.token_encrypted);
       const oaId = this.account.provider_id;
 
-      console.log('📱 Zalo Publisher - Starting publish process:', {
+      console.log('📱 Zalo Publisher - Starting publish process (Article/Feed):', {
         oaId,
         hasMedia: data.mediaUrls && data.mediaUrls.length > 0,
         isScheduled: !!data.scheduledAt
       });
 
-      // Zalo OA supports different message types
-      let messageData: any;
-
-      if (data.mediaUrls && data.mediaUrls.length > 0) {
-        // Media message
-        if (data.mediaUrls.length === 1) {
-          messageData = await this.createSingleMediaMessage(data, accessToken, oaId);
-        } else {
-          messageData = await this.createCarouselMessage(data, accessToken, oaId);
-        }
-      } else {
-        // Text only message
-        messageData = {
-          recipient: {
-            user_id: "broadcast" // For OA broadcast
-          },
-          message: {
-            text: data.content
+      // Prepare Article Data for Zalo Feed
+      // Zalo OA uses "Articles" for feed posts
+      const articleData: any = {
+        type: "normal",
+        title: data.content.length > 50 ? data.content.substring(0, 47) + "..." : (data.content || "Bài viết mới"),
+        author: this.account.name || "AutoPostVN",
+        cover: {
+          photo_url: data.mediaUrls?.[0] || "https://stc-zaloprofile.zdn.vn/pc/v1/images/zalo_share_logo.png"
+        },
+        body: [
+          {
+            type: "text",
+            content: data.content || " "
           }
-        };
+        ]
+      };
+
+      // Add images to body if multiple or if single image (to ensure it's in body too)
+      if (data.mediaUrls && data.mediaUrls.length > 0) {
+        // If single image, it's already cover, but maybe add to body too?
+        // Let's add all images to body for completeness
+        data.mediaUrls.forEach(url => {
+           articleData.body.push({
+             type: "image",
+             content: url,
+             caption: ""
+           });
+        });
       }
 
       // Handle scheduled posting (if supported by Zalo)
       if (data.scheduledAt) {
-        console.log('⚠️ Zalo scheduled posting not fully supported, publishing immediately');
+        console.log('⚠️ Zalo scheduled posting not fully supported via API, publishing immediately');
       }
 
-      // Generate appsecret_proof for Zalo API security
-      const crypto = require('crypto');
-      const appSecret = process.env.ZALO_APP_SECRET;
-      if (!appSecret) {
-        throw new Error('ZALO_APP_SECRET not configured');
-      }
-      const appsecretProof = crypto
-        .createHmac('sha256', appSecret)
-        .update(accessToken)
-        .digest('hex');
-
-      // Send message via Zalo OA API
-      const response = await fetch(`https://openapi.zalo.me/v3.0/oa/message/cs`, {
+      // Zalo API v2.0 Article Create
+      // Note: v2.0 usually works with just access_token in header
+      const response = await fetch(`https://openapi.zalo.me/v2.0/article/create`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'access_token': accessToken,
-          'appsecret_proof': appsecretProof
+          'access_token': accessToken
         },
-        body: JSON.stringify(messageData)
+        body: JSON.stringify(articleData)
       });
 
       const result = await response.json();
@@ -941,10 +938,10 @@ export class ZaloPublisher extends BaseSocialPublisher {
       if (response.ok && result.error === 0) {
         const publishResult: PublishResult = {
           success: true,
-          externalPostId: result.data?.message_id || `zalo_${Date.now()}`,
+          externalPostId: result.data?.token || result.data?.id || `zalo_article_${Date.now()}`,
           platformResponse: result,
           metadata: {
-            messageType: data.mediaUrls?.length > 0 ? 'media' : 'text',
+            messageType: 'article',
             oaId: oaId
           }
         };
@@ -972,68 +969,19 @@ export class ZaloPublisher extends BaseSocialPublisher {
   }
 
   /**
-   * Create single media message for Zalo
+   * Create single media message for Zalo (Deprecated)
    */
   private async createSingleMediaMessage(data: PublishData, accessToken: string, oaId: string): Promise<any> {
-    const mediaUrl = data.mediaUrls[0];
-    const isImage = this.isImageUrl(mediaUrl);
-
-    if (isImage) {
-      return {
-        recipient: {
-          user_id: "broadcast"
-        },
-        message: {
-          attachment: {
-            type: "image",
-            payload: {
-              url: mediaUrl,
-              caption: data.content
-            }
-          }
-        }
-      };
-    } else {
-      // For files or other media types
-      return {
-        recipient: {
-          user_id: "broadcast"
-        },
-        message: {
-          attachment: {
-            type: "file",
-            payload: {
-              url: mediaUrl
-            }
-          },
-          text: data.content
-        }
-      };
-    }
+    // Kept for reference but unused
+    return {};
   }
 
   /**
-   * Create carousel/gallery message for Zalo
+   * Create carousel/gallery message for Zalo (Deprecated)
    */
   private async createCarouselMessage(data: PublishData, accessToken: string, oaId: string): Promise<any> {
-    return {
-      recipient: {
-        user_id: "broadcast"
-      },
-      message: {
-        attachment: {
-          type: "template",
-          payload: {
-            template_type: "list",
-            elements: data.mediaUrls.slice(0, 4).map((url, index) => ({
-              title: `Hình ${index + 1}`,
-              image_url: url,
-              subtitle: index === 0 ? data.content : ""
-            }))
-          }
-        }
-      }
-    };
+    // Kept for reference but unused
+    return {};
   }
 
   /**

@@ -50,14 +50,25 @@ export async function GET(request: NextRequest) {
       // Exchange code for access token
       const tokenData = await exchangeCodeForToken(code);
 
-      // For Zalo OA, we use the OA ID from state or a default one
-      // The OA ID is: 1862014164765694405
-      const oaId = stateData.oa_id || '1862014164765694405';
-      const oaName = stateData.oa_name || 'AutoPostVN';
+      // Fetch OA Info using the access token
+      let oaId = stateData.oa_id;
+      let oaName = stateData.oa_name;
 
-      console.log('🔍 Zalo Callback - Using OA:', { oaId, oaName });
+      try {
+        const accountInfo = await getAccountInfo(tokenData.access_token);
+        oaId = accountInfo.providerId;
+        oaName = accountInfo.name;
+        console.log('🔍 Zalo Callback - Fetched OA Info:', { oaId, oaName });
+      } catch (err) {
+        console.error('⚠️ Failed to fetch OA info, falling back to state data or default:', err);
+        // Fallback to state data or hardcoded ONLY if fetch fails (legacy support)
+        oaId = oaId || '1862014164765694405';
+        oaName = oaName || 'AutoPostVN';
+      }
+
+      console.log('🔍 Zalo Callback - Final OA:', { oaId, oaName });
       
-      // Save to database (no need to call getoa API which requires MAC signature)
+      // Save to database
       const savedAccount = await userManagementService.saveOAuthAccount(
         session.user.email,
         'zalo',
@@ -66,9 +77,10 @@ export async function GET(request: NextRequest) {
           refresh_token: tokenData.refresh_token,
           expires_in: tokenData.expires_in,
           account_info: {
-            providerId: oaId,  // Required by saveOAuthAccount
+            providerId: oaId,
             name: oaName,
-            oa_id: oaId,       // Keep for reference
+            oa_id: oaId,
+            avatar: 'https://stc-zaloprofile.zdn.vn/pc/v1/images/zalo_share_logo.png' // Default avatar
           },
         }
       );
