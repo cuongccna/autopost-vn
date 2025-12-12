@@ -889,7 +889,9 @@ export class ZaloPublisher extends BaseSocialPublisher {
         title: data.content.length > 50 ? data.content.substring(0, 47) + "..." : (data.content || "Bài viết mới"),
         author: this.account.name || "AutoPostVN",
         cover: {
-          photo_url: data.mediaUrls?.[0] || "https://stc-zaloprofile.zdn.vn/pc/v1/images/zalo_share_logo.png"
+          cover_type: "photo",
+          photo_url: data.mediaUrls?.[0] || "https://stc-zaloprofile.zdn.vn/pc/v1/images/zalo_share_logo.png",
+          status: "show"
         },
         body: [
           {
