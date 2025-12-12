@@ -890,7 +890,7 @@ export class ZaloPublisher extends BaseSocialPublisher {
         author: this.account.name || "AutoPostVN",
         cover: {
           cover_type: "photo",
-          photo_url: data.mediaUrls?.[0] || "https://stc-zaloprofile.zdn.vn/pc/v1/images/zalo_share_logo.png",
+          photo_url: data.mediaUrls?.[0] || this.account.avatar || "https://images.unsplash.com/photo-1557683316-973673baf926?w=800&q=80",
           status: "show"
         },
         body: [
