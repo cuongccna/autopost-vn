@@ -28,6 +28,7 @@ export interface SocialAccount {
   provider_id: string;
   workspace_id?: string;
   metadata?: any;
+  avatar_url?: string;
 }
 
 /**
@@ -890,7 +891,7 @@ export class ZaloPublisher extends BaseSocialPublisher {
         author: this.account.name || "AutoPostVN",
         cover: {
           cover_type: "photo",
-          photo_url: data.mediaUrls?.[0] || this.account.avatar || "https://images.unsplash.com/photo-1557683316-973673baf926?w=800&q=80",
+          photo_url: data.mediaUrls?.[0] || this.account.avatar_url || "https://images.unsplash.com/photo-1557683316-973673baf926?w=800&q=80",
           status: "show"
         },
         body: [
