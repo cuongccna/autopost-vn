@@ -894,6 +894,9 @@ export class ZaloPublisher extends BaseSocialPublisher {
       const zaloPostType = data.metadata?.zaloPostType || 'article';
       const isBroadcastPrep = zaloPostType === 'message';
 
+      const appUrl = (process.env.NEXT_PUBLIC_APP_URL || '').replace(/\/$/, '');
+      const defaultCoverUrl = appUrl ? `${appUrl}/icons/android-chrome-512x512.png` : "https://images.unsplash.com/photo-1557683316-973673baf926?w=800&q=80";
+
       const articleData: any = {
         type: "normal",
         title: title,
@@ -902,7 +905,7 @@ export class ZaloPublisher extends BaseSocialPublisher {
         status: isBroadcastPrep ? "hide" : "show", // Hide if preparing for broadcast, Show if posting to feed
         cover: {
           cover_type: "photo",
-          photo_url: data.mediaUrls?.[0] || this.account.avatar_url || "https://images.unsplash.com/photo-1557683316-973673baf926?w=800&q=80",
+          photo_url: data.mediaUrls?.[0] || this.account.avatar_url || defaultCoverUrl,
           status: "show"
         },
         body: [
