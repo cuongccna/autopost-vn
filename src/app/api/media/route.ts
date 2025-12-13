@@ -263,7 +263,7 @@ export async function DELETE(request: NextRequest) {
     // Check if media is used in any pending or draft posts
     const mediaItem = await getMediaItem(mediaId, userId);
     if (mediaItem) {
-      const mediaUrl = mediaItem.url;
+      const mediaUrl = mediaItem.public_url;
       const usageCheck = await query(
         `SELECT id, title, status FROM autopostvn_posts 
          WHERE $1 = ANY(media_urls) 
