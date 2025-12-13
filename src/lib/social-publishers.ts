@@ -53,6 +53,23 @@ export abstract class BaseSocialPublisher {
     });
   }
 
+  protected ensureAbsoluteUrl(url: string): string {
+    if (!url) return url;
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      return url;
+    }
+    // Remove leading slash if present to avoid double slashes
+    const cleanPath = url.startsWith('/') ? url.substring(1) : url;
+    const appUrl = (process.env.NEXT_PUBLIC_APP_URL || '').replace(/\/$/, '');
+    
+    if (!appUrl) {
+      console.warn('NEXT_PUBLIC_APP_URL not set, returning relative URL which may fail');
+      return url;
+    }
+    
+    return `${appUrl}/${cleanPath}`;
+  }
+
   /**
    * Perform fetch with timeout and basic retries for transient failures
    */
@@ -274,12 +291,13 @@ export class FacebookPublisher extends BaseSocialPublisher {
    */
   private async uploadMediaToFacebook(mediaUrl: string, accessToken: string, pageId: string): Promise<string | null> {
     try {
-      console.log('📤 Uploading media:', mediaUrl);
+      const absoluteUrl = this.ensureAbsoluteUrl(mediaUrl);
+      console.log('📤 Uploading media:', absoluteUrl);
       
       // Validate URL is publicly accessible
-      if (mediaUrl.includes('localhost') || mediaUrl.includes('127.0.0.1') || mediaUrl.includes('192.168.')) {
+      if (absoluteUrl.includes('localhost') || absoluteUrl.includes('127.0.0.1') || absoluteUrl.includes('192.168.')) {
         const isProduction = process.env.NODE_ENV === 'production';
-        const warningMsg = `⚠️ ${isProduction ? 'ERROR' : 'WARNING'}: Using local URL (${mediaUrl}) - Facebook cannot access localhost URLs`;
+        const warningMsg = `⚠️ ${isProduction ? 'ERROR' : 'WARNING'}: Using local URL (${absoluteUrl}) - Facebook cannot access localhost URLs`;
         
         if (isProduction) {
           console.error(warningMsg);
@@ -292,7 +310,7 @@ export class FacebookPublisher extends BaseSocialPublisher {
 
       // For external URLs, use url parameter
       const uploadData = {
-        url: mediaUrl,
+        url: absoluteUrl,
         access_token: accessToken,
         published: false // Unpublished photo for later use in post
       };
@@ -897,6 +915,10 @@ export class ZaloPublisher extends BaseSocialPublisher {
       const appUrl = (process.env.NEXT_PUBLIC_APP_URL || '').replace(/\/$/, '');
       const defaultCoverUrl = appUrl ? `${appUrl}/icons/android-chrome-512x512.png` : "https://images.unsplash.com/photo-1557683316-973673baf926?w=800&q=80";
 
+      const coverUrl = data.mediaUrls?.[0] 
+        ? this.ensureAbsoluteUrl(data.mediaUrls[0]) 
+        : (this.account.avatar_url || defaultCoverUrl);
+
       const articleData: any = {
         type: "normal",
         title: title,
@@ -905,7 +927,7 @@ export class ZaloPublisher extends BaseSocialPublisher {
         status: isBroadcastPrep ? "hide" : "show", // Hide if preparing for broadcast, Show if posting to feed
         cover: {
           cover_type: "photo",
-          photo_url: data.mediaUrls?.[0] || this.account.avatar_url || defaultCoverUrl,
+          photo_url: coverUrl,
           status: "show"
         },
         body: [
@@ -923,7 +945,7 @@ export class ZaloPublisher extends BaseSocialPublisher {
         data.mediaUrls.forEach(url => {
            articleData.body.push({
              type: "image",
-             content: url,
+             content: this.ensureAbsoluteUrl(url),
              caption: ""
            });
         });

@@ -134,6 +134,27 @@ export default function ComposeCenterPanel({
       return;
     }
     
+    // Check Instagram Aspect Ratio (4:5 to 1.91:1)
+    if (hasImage) {
+      media.forEach(m => {
+        if (m.mediaType === 'image') {
+          const img = new Image();
+          img.src = m.url;
+          img.onload = () => {
+            const ratio = img.width / img.height;
+            // Instagram allowed ratio: 4:5 (0.8) to 1.91:1 (1.91)
+            if (ratio < 0.8 || ratio > 1.91) {
+              showToast?.({
+                title: 'Cảnh báo tỷ lệ ảnh Instagram',
+                message: `⚠️ Ảnh "${m.name}" có tỷ lệ ${ratio.toFixed(2)} không phù hợp với Instagram (0.8 - 1.91). Bài đăng có thể bị lỗi.`,
+                type: 'warning'
+              });
+            }
+          };
+        }
+      });
+    }
+    
     setUploadedMedia(media);
     const mediaUrls = media.map(m => m.url);
     
