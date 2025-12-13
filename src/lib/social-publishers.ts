@@ -885,9 +885,16 @@ export class ZaloPublisher extends BaseSocialPublisher {
 
       // Prepare Article Data for Zalo Feed
       // Zalo OA uses "Articles" for feed posts
+      const content = data.content || "";
+      // Title: Max 150 chars (safe limit 100)
+      const title = content.length > 100 ? content.substring(0, 97) + "..." : (content || "Bài viết mới");
+      // Description: Max 300 chars
+      const description = content.length > 290 ? content.substring(0, 290) + "..." : (content || "Chi tiết bài viết");
+
       const articleData: any = {
         type: "normal",
-        title: data.content.length > 50 ? data.content.substring(0, 47) + "..." : (data.content || "Bài viết mới"),
+        title: title,
+        description: description,
         author: this.account.name || "AutoPostVN",
         cover: {
           cover_type: "photo",
@@ -897,7 +904,7 @@ export class ZaloPublisher extends BaseSocialPublisher {
         body: [
           {
             type: "text",
-            content: data.content || " "
+            content: content || " "
           }
         ]
       };
