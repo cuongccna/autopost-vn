@@ -896,6 +896,7 @@ export class ZaloPublisher extends BaseSocialPublisher {
         title: title,
         description: description,
         author: this.account.name || "AutoPostVN",
+        status: "show", // Force status to show
         cover: {
           cover_type: "photo",
           photo_url: data.mediaUrls?.[0] || this.account.avatar_url || "https://images.unsplash.com/photo-1557683316-973673baf926?w=800&q=80",
