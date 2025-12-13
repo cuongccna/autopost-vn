@@ -27,6 +27,7 @@ interface ComposeData {
     beats?: { time: number; text: string; }[];
     sub?: string;
     overlayCTA?: string;
+    zaloPostType?: 'article' | 'message';
   };
 }
 
@@ -97,6 +98,17 @@ export default function ComposeRightPanel({
       });
 
       return next;
+    });
+  };
+
+  const handleZaloTypeChange = (type: 'article' | 'message') => {
+    onDataChange({
+      metadata: {
+        ...composeData.metadata,
+        platform: composeData.metadata?.platform || 'Facebook Page',
+        ratio: composeData.metadata?.ratio || '1:1',
+        zaloPostType: type
+      }
     });
   };
 
@@ -319,34 +331,72 @@ export default function ComposeRightPanel({
         
         <div className="space-y-3">
           {Object.entries(PROVIDERS).map(([key, provider]) => (
-            <label
+            <div
               key={key}
-              className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors"
+              className={`p-3 border border-gray-200 rounded-lg transition-colors ${selectedChannels.has(key) ? 'bg-blue-50 border-blue-200' : 'hover:bg-gray-50'}`}
             >
-              <input
-                type="checkbox"
-                checked={selectedChannels.has(key)}
-                onChange={() => toggleChannel(key)}
-                className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-              />
-              <div className="flex-1">
-                <div className="font-medium text-gray-900 flex items-center gap-2">
-                  {provider.label}
-                  {key === 'zalo' && (
-                    <span className="text-xs text-amber-600" title="Yêu cầu gói trả phí">⚠️</span>
-                  )}
+              <div 
+                className="flex items-center gap-3 cursor-pointer"
+                onClick={() => toggleChannel(key)}
+              >
+                <input
+                  type="checkbox"
+                  checked={selectedChannels.has(key)}
+                  readOnly
+                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 pointer-events-none"
+                />
+                <div className="flex-1">
+                  <div className="font-medium text-gray-900 flex items-center gap-2">
+                    {provider.label}
+                    {key === 'zalo' && (
+                      <span className="text-xs text-amber-600" title="Yêu cầu gói trả phí">⚠️</span>
+                    )}
+                  </div>
+                  <div className="text-sm text-gray-500">
+                    Đăng lên {provider.label}
+                    {key === 'zalo' && (
+                      <span className="text-amber-700"> (Yêu cầu gói trả phí)</span>
+                    )}
+                  </div>
                 </div>
-                <div className="text-sm text-gray-500">
-                  Đăng lên {provider.label}
-                  {key === 'zalo' && (
-                    <span className="text-amber-700"> (Yêu cầu gói trả phí)</span>
-                  )}
+                <div className="text-2xl">
+                  {key === 'facebook' ? '📘' : key === 'instagram' ? '📷' : '💬'}
                 </div>
               </div>
-              <div className="text-2xl">
-                {key === 'facebook' ? '📘' : key === 'instagram' ? '📷' : '💬'}
-              </div>
-            </label>
+
+              {/* Zalo Options */}
+              {key === 'zalo' && selectedChannels.has('zalo') && (
+                <div className="mt-3 pl-7 pt-2 border-t border-blue-100 space-y-3">
+                  <label className="flex items-start gap-2 cursor-pointer group">
+                    <input 
+                      type="radio" 
+                      name="zaloPostType" 
+                      checked={!composeData.metadata?.zaloPostType || composeData.metadata?.zaloPostType === 'article'}
+                      onChange={() => handleZaloTypeChange('article')}
+                      className="mt-1 w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500"
+                    />
+                    <div>
+                      <span className="block font-medium text-sm text-gray-900 group-hover:text-blue-700">Đăng bài viết (Article)</span>
+                      <span className="block text-xs text-gray-500">Đăng lên tường OA. Hiển thị công khai ngay lập tức. (Trừ quota bài viết)</span>
+                    </div>
+                  </label>
+
+                  <label className="flex items-start gap-2 cursor-pointer group">
+                    <input 
+                      type="radio" 
+                      name="zaloPostType" 
+                      checked={composeData.metadata?.zaloPostType === 'message'}
+                      onChange={() => handleZaloTypeChange('message')}
+                      className="mt-1 w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500"
+                    />
+                    <div>
+                      <span className="block font-medium text-sm text-gray-900 group-hover:text-blue-700">Soạn tin Broadcast (Ẩn)</span>
+                      <span className="block text-xs text-gray-500">Tạo bài viết ẩn để gửi Broadcast/Tin nhắn trong trang quản trị Zalo.</span>
+                    </div>
+                  </label>
+                </div>
+              )}
+            </div>
           ))}
         </div>
 

@@ -891,12 +891,15 @@ export class ZaloPublisher extends BaseSocialPublisher {
       // Description: Max 300 chars
       const description = content.length > 290 ? content.substring(0, 290) + "..." : (content || "Chi tiết bài viết");
 
+      const zaloPostType = data.metadata?.zaloPostType || 'article';
+      const isBroadcastPrep = zaloPostType === 'message';
+
       const articleData: any = {
         type: "normal",
         title: title,
         description: description,
         author: this.account.name || "AutoPostVN",
-        status: "show", // Force status to show
+        status: isBroadcastPrep ? "hide" : "show", // Hide if preparing for broadcast, Show if posting to feed
         cover: {
           cover_type: "photo",
           photo_url: data.mediaUrls?.[0] || this.account.avatar_url || "https://images.unsplash.com/photo-1557683316-973673baf926?w=800&q=80",
@@ -976,8 +979,9 @@ export class ZaloPublisher extends BaseSocialPublisher {
           externalPostId: result.data?.token || result.data?.id || `zalo_article_${Date.now()}`,
           platformResponse: result,
           metadata: {
-            messageType: 'article',
-            oaId: oaId
+            messageType: isBroadcastPrep ? 'broadcast_prep' : 'article',
+            oaId: oaId,
+            note: isBroadcastPrep ? 'Bài viết đã tạo (ẩn). Vui lòng vào Zalo OA để gửi Broadcast.' : 'Bài viết đã đăng lên tường.'
           }
         };
         this.logPublishAttempt(data, publishResult);
