@@ -356,11 +356,12 @@ function ComposePageContent() {
     setIsSubmitting(true);
 
     try {
-      const endpoint = editingPostId ? `/api/posts/${editingPostId}` : '/api/posts';
+      const endpoint = '/api/posts';
       const method = editingPostId ? 'PUT' : 'POST';
 
       // Map frontend field names to backend field names
       const requestBody = {
+        id: editingPostId, // Include ID for updates
         title: data.content?.substring(0, 100) || 'Untitled', // Create title from content
         content: data.content,
         providers: mapProvidersToAPI(data.channels), // 🔥 MAP UI providers to API providers

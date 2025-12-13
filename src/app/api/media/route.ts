@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { localStorageService } from '@/lib/services/localStorageService';
-import { insert } from '@/lib/db/postgres';
+import { insert, query } from '@/lib/db/postgres';
 import { v4 as uuidv4 } from 'uuid';
 import {
   getUserMedia,
@@ -258,6 +258,29 @@ export async function DELETE(request: NextRequest) {
         { error: 'Media ID is required' },
         { status: 400 }
       );
+    }
+
+    // Check if media is used in any pending or draft posts
+    const mediaItem = await getMediaItem(mediaId, userId);
+    if (mediaItem) {
+      const mediaUrl = mediaItem.url;
+      const usageCheck = await query(
+        `SELECT id, title, status FROM autopostvn_posts 
+         WHERE $1 = ANY(media_urls) 
+         AND status IN ('pending', 'draft')
+         LIMIT 1`,
+        [mediaUrl]
+      );
+
+      if (usageCheck.rows.length > 0) {
+        const post = usageCheck.rows[0];
+        return NextResponse.json(
+          { 
+            error: `Không thể xóa media này vì đang được sử dụng trong bài viết "${post.title}" (Trạng thái: ${post.status}). Vui lòng xóa bài viết hoặc gỡ media khỏi bài viết trước.` 
+          },
+          { status: 400 }
+        );
+      }
     }
 
     if (hard) {
